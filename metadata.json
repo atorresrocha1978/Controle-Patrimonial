@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Material Patrimoniado",
+  "description": "Sistema para rastreamento de ativos por QR Code, mapa de carga por sala com assinatura digital, gestão de manutenções, auditoria e importação Excel.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
