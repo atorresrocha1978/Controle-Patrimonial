@@ -182,7 +182,7 @@ export class ExcelService {
               serialNumber,
               acquisitionValue: value,
               acquisitionDate: date,
-              condition: ['novo', 'bom', 'regular', 'danificado', 'sucata'].includes(condition) ? condition : 'bom',
+              condition: ['novo', 'bom', 'danificado'].includes(condition) ? condition : 'bom',
               notes,
               valid,
               error
@@ -219,7 +219,7 @@ export class ExcelService {
         c => c.toLowerCase() === r.category.toLowerCase()
       ) || 'Informatica';
 
-      const validConditions: AssetCondition[] = ['novo', 'bom', 'regular', 'danificado', 'sucata'];
+      const validConditions: AssetCondition[] = ['novo', 'bom', 'danificado'];
       const matchedCondition = validConditions.find(
         c => c.toLowerCase() === r.condition.toLowerCase()
       ) || 'bom';

@@ -52,11 +52,20 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
   const mapNumber = 'Numero do Mapa Carga ESSgt - 001/14/26';
 
   // Assets in this room
-  const roomAssets = assets.filter(a => a.location.room === currentRoom.name);
+  const roomAssets = currentRoom ? assets.filter(a => a.location.room === currentRoom.name) : [];
 
   // Digital Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // Synchronize rooms list from storage on mount
+  useEffect(() => {
+    const list = StorageService.getRoomsList();
+    setRoomsList(list);
+    if (list.length > 0 && !list.some(r => r.id === selectedRoomId)) {
+      setSelectedRoomId(list[0].id);
+    }
+  }, []);
 
   // Synchronize editedResponsible with current room
   useEffect(() => {
@@ -497,10 +506,9 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                           asset.condition === 'novo' ? 'bg-emerald-100 text-emerald-800' :
                           asset.condition === 'bom' ? 'bg-blue-100 text-blue-800' :
-                          asset.condition === 'regular' ? 'bg-amber-100 text-amber-800' :
                           'bg-rose-100 text-rose-800'
                         }`}>
-                          {asset.condition}
+                          {asset.condition === 'danificado' ? 'Danificado' : asset.condition === 'novo' ? 'Novo' : 'Bom'}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-medium text-slate-800">

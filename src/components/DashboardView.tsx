@@ -3,7 +3,6 @@ import {
   TrendingUp, 
   Package, 
   DollarSign, 
-  Wrench, 
   CheckCircle2, 
   AlertTriangle, 
   FileText, 
@@ -43,8 +42,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalAcquisition = assets.reduce((sum, a) => sum + a.acquisitionValue, 0);
   const totalBookValue = assets.reduce((sum, a) => sum + a.currentBookValue, 0);
   const totalDepreciation = totalAcquisition - totalBookValue;
-  const inMaintenanceCount = assets.filter(a => a.status === 'em_manutencao').length;
-  const scheduledMaintenanceCount = maintenances.filter(m => m.status === 'agendada').length;
+  const inUseCount = assets.filter(a => a.status === 'em_uso').length;
 
   // Category counts
   const categoryCounts: { [cat: string]: number } = {};
@@ -52,19 +50,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     categoryCounts[a.category] = (categoryCounts[a.category] || 0) + 1;
   });
 
-  // Condition counts
-  const conditionCounts: { [cond: string]: number } = {
+  // Condition counts (Novo, Bom, Danificado)
+  const conditionCounts = {
     novo: 0,
     bom: 0,
-    regular: 0,
-    danificado: 0,
-    sucata: 0
+    danificado: 0
   };
   assets.forEach(a => {
-    if (conditionCounts[a.condition] !== undefined) {
-      conditionCounts[a.condition]++;
-    }
+    if (a.condition === 'novo') conditionCounts.novo++;
+    else if (a.condition === 'danificado') conditionCounts.danificado++;
+    else conditionCounts.bom++;
   });
+
+  const physicalHealthRate = assets.length > 0 
+    ? Math.round(((conditionCounts.novo + conditionCounts.bom) / assets.length) * 100)
+    : 100;
 
   // PREDICTIVE ANALYSIS ALGORITHM:
   // Detect assets nearing failure, requiring battery replacement, or warranty expiration
@@ -84,9 +84,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       riskLevel = 'alto';
       predictedAction = 'Troca obrigatória do banco de baterias VRLA (vida útil química esgotando em 60 dias).';
       projectedCost = 1950.00;
-    } else if (a.condition === 'regular' || a.status === 'em_manutencao') {
+    } else if (a.condition === 'danificado' || a.status === 'descarga') {
       riskLevel = 'medio';
-      predictedAction = 'Revisão corretiva de alinhamento e calibração para prevenir parada total.';
+      predictedAction = 'Revisão técnica corretiva ou substituição de peças para restauração funcional.';
       projectedCost = 1200.00;
     } else if (ageYears >= 2 && !a.lastMaintenanceDate) {
       riskLevel = 'medio';
@@ -179,17 +179,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Maintenance */}
+        {/* Ativos em Operação */}
         <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex items-center justify-between shadow-sm">
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Em Manutenção</span>
-            <div className="text-2xl font-black text-amber-400 mt-1">{inMaintenanceCount}</div>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Ativos em Operação</span>
+            <div className="text-2xl font-black text-cyan-400 mt-1">{inUseCount}</div>
             <span className="text-[11px] text-slate-400 mt-1 block">
-              {scheduledMaintenanceCount} revisões programadas
+              {((inUseCount / (totalAssets || 1)) * 100).toFixed(0)}% em pleno uso
             </span>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-amber-950/60 text-amber-400 flex items-center justify-center border border-amber-800/60">
-            <Wrench className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-xl bg-cyan-950/60 text-cyan-400 flex items-center justify-center border border-cyan-800/60">
+            <ShieldCheck className="w-6 h-6" />
           </div>
         </div>
 
@@ -308,7 +308,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-[10px] text-slate-400">Vistorias recentes</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
               <span className="text-[10px] text-emerald-400 uppercase font-bold block">Novos</span>
               <span className="text-2xl font-black text-white mt-0.5 block">{conditionCounts.novo}</span>
@@ -322,27 +322,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-              <span className="text-[10px] text-amber-400 uppercase font-bold block">Regulares</span>
-              <span className="text-2xl font-black text-white mt-0.5 block">{conditionCounts.regular}</span>
-              <span className="text-[10px] text-slate-500">Desgaste natural</span>
-            </div>
-
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
               <span className="text-[10px] text-rose-400 uppercase font-bold block">Danificados</span>
               <span className="text-2xl font-black text-white mt-0.5 block">{conditionCounts.danificado}</span>
               <span className="text-[10px] text-slate-500">Aguardando reparo</span>
             </div>
 
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Sucata / Baixa</span>
-              <span className="text-2xl font-black text-white mt-0.5 block">{conditionCounts.sucata}</span>
-              <span className="text-[10px] text-slate-500">Descarte ecológico</span>
-            </div>
-
             <div className="bg-indigo-950/40 p-3 rounded-xl border border-indigo-800/60 text-center flex flex-col justify-center">
               <span className="text-[10px] text-indigo-300 uppercase font-bold block">Saúde Geral</span>
-              <span className="text-2xl font-black text-indigo-200 mt-0.5 block">94%</span>
-              <span className="text-[10px] text-indigo-400">Score excelente</span>
+              <span className="text-2xl font-black text-indigo-200 mt-0.5 block">{physicalHealthRate}%</span>
+              <span className="text-[10px] text-indigo-400">Ativos operacionais</span>
             </div>
           </div>
         </div>

@@ -32,6 +32,16 @@ export const INITIAL_USERS: User[] = [
     lastLogin: '2026-09-19T07:15:00Z'
   },
   {
+    id: 'usr-5',
+    name: 'Capitão Marcos Vinícius Ferreira',
+    email: 'marcos.detentor@essgt.eb.mil.br',
+    role: 'detentor_executivo',
+    department: 'Detenção Executiva & Patrimônio',
+    active: true,
+    createdAt: '2025-02-01T08:00:00Z',
+    lastLogin: '2026-09-19T08:00:00Z'
+  },
+  {
     id: 'usr-4',
     name: 'Juliana Costa Lima',
     email: 'juliana.costa@empresa.com.br',
@@ -192,8 +202,8 @@ export const INITIAL_ASSETS: PatrimonialAsset[] = [
       fullAddress: 'Bloco A, 1º Andar, Sala 102',
       responsiblePerson: 'Carlos Alberto Silva'
     },
-    status: 'em_manutencao',
-    condition: 'regular',
+    status: 'disponivel',
+    condition: 'danificado',
     acquisitionDate: '2023-09-05',
     acquisitionValue: 14500.00,
     currentBookValue: 10875.00,
@@ -267,7 +277,7 @@ export const INITIAL_ASSETS: PatrimonialAsset[] = [
       responsiblePerson: 'Mariana Duarte Souza'
     },
     status: 'em_uso',
-    condition: 'regular',
+    condition: 'bom',
     acquisitionDate: '2022-05-15',
     acquisitionValue: 9800.00,
     currentBookValue: 4900.00,
@@ -535,8 +545,8 @@ export const INITIAL_ERP_CONFIG: ErpSyncConfig = {
 export const INITIAL_NOTIFICATIONS: AppNotification[] = [
   {
     id: 'notif-1',
-    title: 'Manutenção Agendada Próxima',
-    message: 'O servidor PowerEdge R750 (PAT-2024-002) tem revisão preventiva agendada para 25/09/2026.',
+    title: 'Conferência Física Recomendada',
+    message: 'O servidor PowerEdge R750 (PAT-2024-002) está com prazo de conferência semestral próximo do vencimento.',
     type: 'warning',
     date: '2026-09-19T08:00:00Z',
     read: false,
@@ -544,8 +554,8 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
   },
   {
     id: 'notif-2',
-    title: 'Item em Manutenção Corretiva',
-    message: 'Projetor Laser Sony (PAT-2024-004) está em manutenção com previsão de retorno em 22/09/2026.',
+    title: 'Mapa Carga Assinado',
+    message: 'Termo de responsabilidade da Sala de Reuniões Executiva assinado e arquivado digitalmente.',
     type: 'info',
     date: '2026-09-18T16:30:00Z',
     read: false,

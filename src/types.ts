@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'employee' | 'auditor';
+export type UserRole = 'admin' | 'employee' | 'auditor' | 'detentor_executivo';
 
 export interface User {
   id: string;
@@ -14,13 +14,10 @@ export interface User {
 
 export type AssetStatus = 
   | 'em_uso' 
-  | 'em_manutencao' 
   | 'disponivel' 
-  | 'baixado' 
-  | 'em_transferencia'
-  | 'danificado';
+  | 'descarga';
 
-export type AssetCondition = 'novo' | 'bom' | 'regular' | 'danificado' | 'sucata';
+export type AssetCondition = 'novo' | 'bom' | 'danificado';
 
 export type AssetCategory = 
   | 'Informatica' 

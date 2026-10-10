@@ -185,9 +185,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                       {isSelected && <Check className="w-3 h-3 text-indigo-400" />}
                     </div>
                     <span className={`text-[10px] block mt-0.5 font-medium ${
-                      u.role === 'admin' ? 'text-rose-400' : u.role === 'auditor' ? 'text-sky-400' : 'text-emerald-400'
+                      u.role === 'admin' 
+                        ? 'text-rose-400' 
+                        : u.role === 'auditor' 
+                        ? 'text-sky-400' 
+                        : u.role === 'detentor_executivo'
+                        ? 'text-amber-400'
+                        : 'text-emerald-400'
                     }`}>
-                      {u.role === 'admin' ? 'Administrador' : u.role === 'auditor' ? 'Auditor' : 'Funcionário'}
+                      {u.role === 'admin' 
+                        ? 'Administrador' 
+                        : u.role === 'auditor' 
+                        ? 'Auditor' 
+                        : u.role === 'detentor_executivo'
+                        ? 'Detentor Executivo'
+                        : 'Funcionário'}
                     </span>
                   </button>
                 );

@@ -228,7 +228,15 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                     <td className="py-2.5 px-3 text-emerald-400 font-mono">
                       R$ {row.acquisitionValue.toFixed(2)}
                     </td>
-                    <td className="py-2.5 px-3 capitalize">{row.condition}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        row.condition === 'novo' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                        row.condition === 'bom' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                        'bg-rose-950 text-rose-300 border border-rose-800'
+                      }`}>
+                        {row.condition === 'danificado' ? 'Danificado' : row.condition === 'novo' ? 'Novo' : 'Bom'}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

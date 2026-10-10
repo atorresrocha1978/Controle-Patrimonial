@@ -427,10 +427,8 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           >
             <option value="all">Todos Status</option>
             <option value="em_uso">Em Uso</option>
-            <option value="em_manutencao">Em Manutenção</option>
             <option value="disponivel">Disponível</option>
-            <option value="danificado">Danificado</option>
-            <option value="baixado">Baixado</option>
+            <option value="descarga">Descarga</option>
           </select>
         </div>
       </div>
@@ -456,14 +454,24 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                     {asset.code}
                   </span>
 
-                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                    asset.status === 'em_uso' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' :
-                    asset.status === 'em_manutencao' ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60' :
-                    asset.status === 'danificado' ? 'bg-rose-950/60 text-rose-300 border border-rose-800/60' :
-                    'bg-slate-800 text-slate-300'
-                  }`}>
-                    {asset.status.replace('_', ' ')}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      asset.condition === 'novo' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' :
+                      asset.condition === 'bom' ? 'bg-blue-950/60 text-blue-300 border border-blue-800/60' :
+                      'bg-rose-950/60 text-rose-300 border border-rose-800/60'
+                    }`}>
+                      {asset.condition === 'novo' ? 'Novo' : asset.condition === 'bom' ? 'Bom' : 'Danificado'}
+                    </span>
+
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      asset.status === 'em_uso' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' :
+                      asset.status === 'disponivel' ? 'bg-sky-950/60 text-sky-300 border border-sky-800/60' :
+                      asset.status === 'descarga' ? 'bg-rose-950/60 text-rose-300 border border-rose-800/60' :
+                      'bg-slate-800 text-slate-300'
+                    }`}>
+                      {asset.status === 'em_uso' ? 'Em Uso' : asset.status === 'disponivel' ? 'Disponível' : asset.status === 'descarga' ? 'Descarga' : asset.status}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Title and Description */}
@@ -574,7 +582,14 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 </div>
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-500 uppercase block">Conservação</span>
-                  <span className="font-semibold capitalize text-indigo-300">{activeAssetModal.condition}</span>
+                  <span className={`font-semibold capitalize ${
+                    activeAssetModal.condition === 'novo' ? 'text-emerald-400' :
+                    activeAssetModal.condition === 'bom' ? 'text-blue-400' :
+                    'text-rose-400'
+                  }`}>
+                    {activeAssetModal.condition === 'novo' ? 'Novo' :
+                     activeAssetModal.condition === 'bom' ? 'Bom' : 'Danificado'}
+                  </span>
                 </div>
               </div>
 
@@ -965,9 +980,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   >
                     <option value="novo">Novo</option>
                     <option value="bom">Bom</option>
-                    <option value="regular">Regular</option>
                     <option value="danificado">Danificado</option>
-                    <option value="sucata">Sucata</option>
                   </select>
                 </div>
                 <div>
@@ -978,10 +991,8 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
                   >
                     <option value="em_uso">Em Uso</option>
-                    <option value="em_manutencao">Em Manutenção</option>
                     <option value="disponivel">Disponível</option>
-                    <option value="danificado">Danificado</option>
-                    <option value="baixado">Baixado</option>
+                    <option value="descarga">Descarga</option>
                   </select>
                 </div>
               </div>

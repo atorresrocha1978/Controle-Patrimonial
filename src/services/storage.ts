@@ -40,7 +40,23 @@ export class StorageService {
       localStorage.setItem(KEYS.USERS, JSON.stringify(INITIAL_USERS));
       return INITIAL_USERS;
     }
-    return JSON.parse(data);
+    try {
+      const users: User[] = JSON.parse(data);
+      // Ensure default users from INITIAL_USERS are included if missing (like new Detentor Executivo)
+      let updated = false;
+      INITIAL_USERS.forEach(initUser => {
+        if (!users.some(u => u.id === initUser.id || u.email === initUser.email)) {
+          users.push(initUser);
+          updated = true;
+        }
+      });
+      if (updated) {
+        localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+      }
+      return users;
+    } catch {
+      return INITIAL_USERS;
+    }
   }
 
   static saveUsers(users: User[]): void {
@@ -73,7 +89,45 @@ export class StorageService {
       localStorage.setItem(KEYS.ASSETS, JSON.stringify(INITIAL_ASSETS));
       return INITIAL_ASSETS;
     }
-    return JSON.parse(data);
+    try {
+      const parsed: PatrimonialAsset[] = JSON.parse(data);
+      // Normalize statuses to only: 'em_uso' | 'disponivel' | 'descarga'
+      // Normalize conditions to only: 'novo' | 'bom' | 'danificado'
+      let modified = false;
+      const normalized = parsed.map(asset => {
+        let status = asset.status;
+        if (status === ('em_manutencao' as any) || status === ('danificado' as any) || status === ('em_transferencia' as any)) {
+          status = 'em_uso';
+          modified = true;
+        } else if (status === ('baixado' as any)) {
+          status = 'descarga';
+          modified = true;
+        } else if (status !== 'em_uso' && status !== 'disponivel' && status !== 'descarga') {
+          status = 'em_uso';
+          modified = true;
+        }
+
+        let condition = asset.condition;
+        if ((condition as any) === 'regular') {
+          condition = 'bom';
+          modified = true;
+        } else if ((condition as any) === 'sucata') {
+          condition = 'danificado';
+          modified = true;
+        } else if (condition !== 'novo' && condition !== 'bom' && condition !== 'danificado') {
+          condition = 'bom';
+          modified = true;
+        }
+
+        return { ...asset, status, condition };
+      });
+      if (modified) {
+        localStorage.setItem(KEYS.ASSETS, JSON.stringify(normalized));
+      }
+      return normalized;
+    } catch {
+      return INITIAL_ASSETS;
+    }
   }
 
   static saveAssets(assets: PatrimonialAsset[]): void {
@@ -188,9 +242,7 @@ export class StorageService {
       const targetAsset = assets.find(a => a.id === record.assetId);
       if (targetAsset) {
         targetAsset.lastMaintenanceDate = record.completionDate || new Date().toISOString().split('T')[0];
-        if (targetAsset.status === 'em_manutencao') {
-          targetAsset.status = 'em_uso';
-        }
+        targetAsset.status = 'em_uso';
         this.saveAssets(assets);
       }
     }
@@ -312,6 +364,112 @@ export class StorageService {
 
   static saveRoomsList(rooms: RoomInfo[]): void {
     localStorage.setItem(KEYS.ROOMS, JSON.stringify(rooms));
+  }
+
+  static addRoom(roomData: Omit<RoomInfo, 'id'>, user: User): RoomInfo {
+    const rooms = this.getRoomsList();
+    const newRoom: RoomInfo = {
+      id: `sala-${Date.now()}`,
+      name: roomData.name.trim(),
+      building: roomData.building.trim(),
+      floor: roomData.floor.trim(),
+      department: roomData.department.trim(),
+      responsible: roomData.responsible.trim()
+    };
+    const updated = [...rooms, newRoom];
+    this.saveRoomsList(updated);
+
+    this.addAuditLog({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'CRIACAO',
+      entity: 'Salas / Locais',
+      entityId: newRoom.name,
+      details: `Sala "${newRoom.name}" (${newRoom.building}, ${newRoom.floor}) cadastrada com responsável "${newRoom.responsible}".`
+    });
+
+    return newRoom;
+  }
+
+  static updateRoom(roomId: string, data: Partial<Omit<RoomInfo, 'id'>>, user: User): RoomInfo[] {
+    const rooms = this.getRoomsList();
+    const targetRoom = rooms.find(r => r.id === roomId);
+    if (!targetRoom) return rooms;
+
+    const oldName = targetRoom.name;
+    const oldResponsible = targetRoom.responsible;
+    const updatedRoom: RoomInfo = {
+      ...targetRoom,
+      name: data.name !== undefined ? data.name.trim() : targetRoom.name,
+      building: data.building !== undefined ? data.building.trim() : targetRoom.building,
+      floor: data.floor !== undefined ? data.floor.trim() : targetRoom.floor,
+      department: data.department !== undefined ? data.department.trim() : targetRoom.department,
+      responsible: data.responsible !== undefined ? data.responsible.trim() : targetRoom.responsible,
+    };
+
+    const updatedRooms = rooms.map(r => r.id === roomId ? updatedRoom : r);
+    this.saveRoomsList(updatedRooms);
+
+    // Sync assets if room name, building, floor or responsible changed
+    const assets = this.getAssets();
+    let assetsChanged = false;
+    const updatedAssets = assets.map(a => {
+      if (a.location.room === oldName) {
+        assetsChanged = true;
+        return {
+          ...a,
+          location: {
+            ...a.location,
+            room: updatedRoom.name,
+            building: updatedRoom.building,
+            floor: updatedRoom.floor,
+            responsiblePerson: updatedRoom.responsible
+          }
+        };
+      }
+      return a;
+    });
+
+    if (assetsChanged) {
+      this.saveAssets(updatedAssets);
+    }
+
+    this.addAuditLog({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'EDICAO',
+      entity: 'Salas / Locais',
+      entityId: updatedRoom.name,
+      details: `Sala "${updatedRoom.name}" atualizada (Prédio: ${updatedRoom.building}, Andar: ${updatedRoom.floor}, Setor: ${updatedRoom.department}, Resp: ${updatedRoom.responsible}). Anterior: "${oldName}" (Resp: ${oldResponsible}).`
+    });
+
+    return updatedRooms;
+  }
+
+  static deleteRoom(roomId: string, user: User): { updatedRooms: RoomInfo[]; affectedAssetsCount: number } {
+    const rooms = this.getRoomsList();
+    const targetRoom = rooms.find(r => r.id === roomId);
+    if (!targetRoom) return { updatedRooms: rooms, affectedAssetsCount: 0 };
+
+    const assets = this.getAssets();
+    const affectedAssets = assets.filter(a => a.location.room === targetRoom.name);
+
+    const updatedRooms = rooms.filter(r => r.id !== roomId);
+    this.saveRoomsList(updatedRooms);
+
+    this.addAuditLog({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'EXCLUSAO',
+      entity: 'Salas / Locais',
+      entityId: targetRoom.name,
+      details: `Sala/Local "${targetRoom.name}" (${targetRoom.building}, Resp: ${targetRoom.responsible}) foi excluída. Bens afetados: ${affectedAssets.length}.`
+    });
+
+    return { updatedRooms, affectedAssetsCount: affectedAssets.length };
   }
 
   static updateRoomResponsible(roomId: string, newResponsible: string, user: User): RoomInfo[] {

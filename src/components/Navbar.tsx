@@ -215,9 +215,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? 'bg-rose-950 text-rose-300 border border-rose-800/60' 
                     : currentUser.role === 'auditor'
                     ? 'bg-sky-950 text-sky-300 border border-sky-800/60'
+                    : currentUser.role === 'detentor_executivo'
+                    ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
                     : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
                 }`}>
-                  {currentUser.role === 'admin' ? 'Administrador' : currentUser.role === 'auditor' ? 'Auditor Interno' : 'Funcionário'}
+                  {currentUser.role === 'admin' 
+                    ? 'Administrador' 
+                    : currentUser.role === 'auditor' 
+                    ? 'Auditor Interno' 
+                    : currentUser.role === 'detentor_executivo'
+                    ? 'Detentor Executivo'
+                    : 'Funcionário'}
                 </span>
               </div>
             </div>

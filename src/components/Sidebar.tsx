@@ -3,7 +3,6 @@ import {
   LayoutDashboard, 
   Package, 
   FileText, 
-  Wrench, 
   CheckSquare, 
   FileSpreadsheet, 
   Database, 
@@ -18,7 +17,6 @@ export type ActiveTab =
   | 'dashboard' 
   | 'assets' 
   | 'room-charge-map' 
-  | 'maintenance' 
   | 'audit-compliance' 
   | 'excel-import' 
   | 'erp-sync' 
@@ -44,35 +42,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Painel & Preditivo',
       icon: LayoutDashboard,
       description: 'KPIs e análise preditiva',
-      allowedRoles: ['admin', 'employee', 'auditor']
+      allowedRoles: ['admin', 'employee', 'auditor', 'detentor_executivo']
     },
     {
       id: 'assets' as ActiveTab,
       label: 'Materiais & Ativos',
       icon: Package,
       description: 'Inventário e rastreio QR',
-      allowedRoles: ['admin', 'employee', 'auditor']
+      allowedRoles: ['admin', 'employee', 'auditor', 'detentor_executivo']
     },
     {
       id: 'room-charge-map' as ActiveTab,
       label: 'Mapa Carga da Sala',
       icon: FileText,
       description: 'Termo e assinatura digital',
-      allowedRoles: ['admin', 'employee', 'auditor']
-    },
-    {
-      id: 'maintenance' as ActiveTab,
-      label: 'Gestão Manutenções',
-      icon: Wrench,
-      description: 'Revisões e periodicidade',
-      allowedRoles: ['admin', 'employee', 'auditor']
+      allowedRoles: ['admin', 'employee', 'auditor', 'detentor_executivo']
     },
     {
       id: 'audit-compliance' as ActiveTab,
       label: 'Auditoria & Conformidade',
       icon: CheckSquare,
       description: 'Conferência física',
-      allowedRoles: ['admin', 'employee', 'auditor']
+      allowedRoles: ['admin', 'employee', 'auditor', 'detentor_executivo']
     },
     {
       id: 'excel-import' as ActiveTab,
@@ -86,21 +77,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Integração ERP',
       icon: Database,
       description: 'Sincronização automática',
-      allowedRoles: ['admin', 'employee', 'auditor']
+      allowedRoles: ['admin', 'employee', 'auditor', 'detentor_executivo']
     },
     {
       id: 'audit-logs' as ActiveTab,
       label: 'Logs de Auditoria',
       icon: History,
       description: 'Histórico de alterações',
-      allowedRoles: ['admin', 'auditor']
+      allowedRoles: ['admin', 'auditor', 'detentor_executivo']
     },
     {
       id: 'users' as ActiveTab,
-      label: 'Gestão de Usuários',
-      icon: Users,
-      description: 'Permissões e perfis',
-      allowedRoles: ['admin']
+      label: 'Salas & Responsáveis',
+      icon: Building2,
+      description: 'Salas, locais e responsáveis',
+      allowedRoles: ['admin', 'employee']
     }
   ];
 

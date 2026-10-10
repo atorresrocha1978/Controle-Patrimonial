@@ -7,7 +7,6 @@ import { LoginScreen } from './components/LoginScreen';
 import { DashboardView } from './components/DashboardView';
 import { AssetsView } from './components/AssetsView';
 import { RoomChargeMapView } from './components/RoomChargeMapView';
-import { MaintenanceView } from './components/MaintenanceView';
 import { AuditsView } from './components/AuditsView';
 import { ExcelImportView } from './components/ExcelImportView';
 import { ErpIntegrationView } from './components/ErpIntegrationView';
@@ -186,14 +185,6 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'maintenance' && (
-            <MaintenanceView
-              assets={assets}
-              currentUser={currentUser}
-              onRefreshData={refreshAllData}
-            />
-          )}
-
           {activeTab === 'audit-compliance' && (
             <AuditsView
               assets={assets}
@@ -217,14 +208,15 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'users' && currentUser.role === 'admin' && (
+          {activeTab === 'users' && (currentUser.role === 'admin' || currentUser.role === 'employee') && (
             <UsersView
               currentUser={currentUser}
               onCurrentUserUpdate={(updated) => setCurrentUser(updated)}
+              onDataUpdate={refreshAllData}
             />
           )}
 
-          {activeTab === 'audit-logs' && currentUser.role === 'admin' && (
+          {activeTab === 'audit-logs' && (currentUser.role === 'admin' || currentUser.role === 'auditor' || currentUser.role === 'detentor_executivo') && (
             <AuditLogsView />
           )}
         </main>

@@ -254,7 +254,7 @@ export class PdfGeneratorService {
     const totalAcquisition = assets.reduce((acc, a) => acc + a.acquisitionValue, 0);
     const totalBookValue = assets.reduce((acc, a) => acc + a.currentBookValue, 0);
     const accumulatedDeprec = totalAcquisition - totalBookValue;
-    const inMaintenanceCount = assets.filter(a => a.status === 'em_manutencao').length;
+    const inDescargaCount = assets.filter(a => a.status === 'descarga').length;
 
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
@@ -265,7 +265,7 @@ export class PdfGeneratorService {
     doc.text('TOTAL DE ATIVOS', 18, 36);
     doc.text('VALOR AQUISIÇÃO', 60, 36);
     doc.text('VALOR CONTÁBIL ATUAL', 110, 36);
-    doc.text('EM MANUTENÇÃO', 165, 36);
+    doc.text('DESCARGA', 165, 36);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
@@ -273,7 +273,7 @@ export class PdfGeneratorService {
     doc.text(`${totalAssets} itens`, 18, 43);
     doc.text(`R$ ${totalAcquisition.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 60, 43);
     doc.text(`R$ ${totalBookValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 110, 43);
-    doc.text(`${inMaintenanceCount} ativo(s)`, 165, 43);
+    doc.text(`${inDescargaCount} ativo(s)`, 165, 43);
 
     // Assets Table
     const tableData = assets.map(a => [
