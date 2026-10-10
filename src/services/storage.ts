@@ -119,7 +119,13 @@ export class StorageService {
           modified = true;
         }
 
-        return { ...asset, status, condition };
+        let detentorResponsavel = asset.detentorResponsavel;
+        if (!detentorResponsavel) {
+          detentorResponsavel = asset.location?.responsiblePerson || 'Carlos Alberto Silva';
+          modified = true;
+        }
+
+        return { ...asset, status, condition, detentorResponsavel };
       });
       if (modified) {
         localStorage.setItem(KEYS.ASSETS, JSON.stringify(normalized));
@@ -153,7 +159,7 @@ export class StorageService {
         action: 'CRIACAO',
         entity: 'Patrimonio',
         entityId: asset.code,
-        details: `Novo ativo "${asset.name}" cadastrado na sala ${asset.location.room}. Valor: R$ ${asset.acquisitionValue.toFixed(2)}.`
+        details: `Novo ativo "${asset.name}" cadastrado na sala ${asset.location.room}. Detentor: ${asset.detentorResponsavel || asset.location.responsiblePerson}. Valor: R$ ${asset.acquisitionValue.toFixed(2)}.`
       });
     } else {
       updatedAssets = assets.map(a => (a.id === asset.id ? asset : a));
@@ -164,7 +170,7 @@ export class StorageService {
         action: 'EDICAO',
         entity: 'Patrimonio',
         entityId: asset.code,
-        details: `Ativo "${asset.name}" atualizado. Status: ${asset.status}, Local: ${asset.location.room}.`
+        details: `Ativo "${asset.name}" atualizado. Detentor: ${asset.detentorResponsavel || asset.location.responsiblePerson}, Status: ${asset.status}, Local: ${asset.location.room}.`
       });
     }
 

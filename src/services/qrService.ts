@@ -3,10 +3,10 @@ import QRCode from 'qrcode';
 export async function generateQrCodeDataUrl(text: string): Promise<string> {
   try {
     const dataUrl = await QRCode.toDataURL(text, {
-      width: 320,
-      margin: 1,
+      width: 400,
+      margin: 0,
       color: {
-        dark: '#0f172a',
+        dark: '#000000',
         light: '#ffffff'
       },
       errorCorrectionLevel: 'M'
@@ -18,11 +18,17 @@ export async function generateQrCodeDataUrl(text: string): Promise<string> {
   }
 }
 
-export function formatAssetPayloadForQr(asset: { code: string; name: string; room: string }): string {
+export function formatAssetPayloadForQr(asset: { 
+  code: string; 
+  name: string; 
+  room?: string;
+  serialNumber?: string;
+}): string {
   return JSON.stringify({
     patrimonio: asset.code,
     descricao: asset.name,
-    local: asset.room,
+    serie: asset.serialNumber || 'N/A',
+    local: asset.room || '',
     appUrl: window.location.origin
   });
 }

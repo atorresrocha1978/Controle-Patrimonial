@@ -52,6 +52,7 @@ export interface PatrimonialAsset {
   name: string;
   description: string;
   category: AssetCategory;
+  detentorResponsavel?: string; // Detentor Responsável direto pelo ativo
   serialNumber?: string;
   brand?: string;
   model?: string;

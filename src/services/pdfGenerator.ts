@@ -370,7 +370,7 @@ export class PdfGeneratorService {
       a.code,
       a.name,
       a.location.room,
-      a.location.responsiblePerson,
+      a.detentorResponsavel || a.location.responsiblePerson,
       a.lastAuditedDate || 'Pendente',
       a.condition.toUpperCase(),
       a.status === 'em_uso' ? 'CONFORME' : a.status.replace('_', ' ').toUpperCase()
@@ -379,7 +379,7 @@ export class PdfGeneratorService {
     autoTable(doc, {
       startY: 35,
       margin: { left: 14, right: 14, bottom: 20 },
-      head: [['Código', 'Descrição do Ativo', 'Localização Auditada', 'Responsável', 'Data Auditoria', 'Estado', 'Parecer Auditoria']],
+      head: [['Código', 'Descrição do Ativo', 'Localização Auditada', 'Detentor Responsável', 'Data Auditoria', 'Estado', 'Parecer Auditoria']],
       body: tableData,
       theme: 'grid',
       headStyles: {

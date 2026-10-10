@@ -209,7 +209,7 @@ export const AuditsView: React.FC<AuditsViewProps> = ({
                 <th className="py-3 px-4">Patrimônio</th>
                 <th className="py-3 px-4">Material / Especificação</th>
                 <th className="py-3 px-4">Local Esperado</th>
-                <th className="py-3 px-4">Responsável</th>
+                <th className="py-3 px-4">Detentor Responsável</th>
                 <th className="py-3 px-4">Última Auditoria</th>
                 <th className="py-3 px-4 text-center">Status na Conferência</th>
               </tr>
@@ -229,8 +229,9 @@ export const AuditsView: React.FC<AuditsViewProps> = ({
                     <td className="py-3 px-4 text-slate-300">
                       {asset.location.room}
                     </td>
-                    <td className="py-3 px-4 text-slate-400">
-                      {asset.location.responsiblePerson}
+                    <td className="py-3 px-4">
+                      <div className="font-medium text-slate-200">{asset.detentorResponsavel || asset.location.responsiblePerson}</div>
+                      <div className="text-[10px] text-slate-500">Resp. Sala: {asset.location.responsiblePerson}</div>
                     </td>
                     <td className="py-3 px-4 text-slate-500">
                       {asset.lastAuditedDate || 'Nunca'}

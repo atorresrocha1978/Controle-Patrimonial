@@ -494,6 +494,9 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
                       </td>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900">{asset.name}</div>
+                        <div className="text-[11px] text-indigo-700 font-medium">
+                          Detentor: {asset.detentorResponsavel || asset.location.responsiblePerson}
+                        </div>
                         <div className="text-[11px] text-slate-500 line-clamp-1">{asset.description}</div>
                       </td>
                       <td className="py-3 px-3 text-slate-600">

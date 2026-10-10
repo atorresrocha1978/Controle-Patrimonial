@@ -9,6 +9,7 @@ export interface ParsedAssetRow {
   building?: string;
   floor?: string;
   responsiblePerson?: string;
+  detentorResponsavel?: string;
   brand?: string;
   model?: string;
   serialNumber?: string;
@@ -36,6 +37,7 @@ export class ExcelService {
       'Edificio',
       'Andar',
       'Responsavel_Sala',
+      'Detentor_Responsavel',
       'Valor_Aquisicao',
       'Data_Aquisicao',
       'Estado_Conservacao',
@@ -54,6 +56,7 @@ export class ExcelService {
         'Bloco A - Engenharia',
         '1º Andar',
         'Mariana Duarte Souza',
+        'Mariana Duarte Souza',
         6450.00,
         '2026-05-10',
         'novo',
@@ -70,6 +73,7 @@ export class ExcelService {
         'Bloco B - Logística',
         'Térreo',
         'Juliana Costa Lima',
+        'Juliana Costa Lima',
         1150.00,
         '2026-03-12',
         'bom',
@@ -85,6 +89,7 @@ export class ExcelService {
         'Laboratório Químico & P&D',
         'Bloco C - Pesquisa',
         '3º Andar',
+        'Dra. Fernanda Lins',
         'Dra. Fernanda Lins',
         3890.00,
         '2026-01-20',
@@ -105,6 +110,7 @@ export class ExcelService {
       { wch: 26 },
       { wch: 22 },
       { wch: 12 },
+      { wch: 24 },
       { wch: 24 },
       { wch: 16 },
       { wch: 15 },
@@ -141,6 +147,7 @@ export class ExcelService {
             const building = String(row['Edificio'] || row['Prédio'] || row['Bloco'] || 'Bloco A - Engenharia').trim();
             const floor = String(row['Andar'] || 'Térreo').trim();
             const responsible = String(row['Responsavel_Sala'] || row['Responsavel'] || 'Carlos Alberto Silva').trim();
+            const detentorResponsavel = String(row['Detentor_Responsavel'] || row['Detentor Responsavel'] || row['Detentor'] || responsible || 'Carlos Alberto Silva').trim();
             const brand = String(row['Marca'] || '').trim();
             const model = String(row['Modelo'] || '').trim();
             const serialNumber = String(row['Numero_Serie'] || row['Serie'] || '').trim();
@@ -177,6 +184,7 @@ export class ExcelService {
               building,
               floor,
               responsiblePerson: responsible,
+              detentorResponsavel,
               brand,
               model,
               serialNumber,
@@ -230,6 +238,7 @@ export class ExcelService {
         name: r.name,
         description: `${r.name} - Cadastrado via importação em lote.`,
         category: matchedCategory,
+        detentorResponsavel: r.detentorResponsavel || r.responsiblePerson || currentUser.name,
         brand: r.brand,
         model: r.model,
         serialNumber: r.serialNumber,

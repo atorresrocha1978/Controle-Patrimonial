@@ -20,7 +20,8 @@ import {
   ShieldCheck, 
   X, 
   Check,
-  AlertTriangle
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 import { 
   PatrimonialAsset, 
@@ -59,6 +60,15 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [qrCodeModalAsset, setQrCodeModalAsset] = useState<PatrimonialAsset | null>(null);
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string>('');
+  const [assetToDelete, setAssetToDelete] = useState<PatrimonialAsset | null>(null);
+
+  // Feedback notifications
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showNotification = (text: string, type: 'success' | 'error' = 'success') => {
+    setFeedbackMsg({ type, text });
+    setTimeout(() => setFeedbackMsg(null), 4500);
+  };
 
   // Transfer room state
   const [targetRoom, setTargetRoom] = useState('');
@@ -70,6 +80,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
     name: '',
     description: '',
     category: 'Informatica',
+    detentorResponsavel: currentUser.name,
     condition: 'novo',
     status: 'em_uso',
     acquisitionValue: 1000,
@@ -88,7 +99,10 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   });
 
   const roomsList = StorageService.getRoomsList();
+  const usersList = StorageService.getUsers();
   const isAdmin = currentUser.role === 'admin';
+  const canManage = currentUser.role === 'admin' || currentUser.role === 'employee';
+  const canDelete = currentUser.role !== 'auditor' && currentUser.role !== 'detentor_executivo';
 
   // Open asset if passed from parent
   useEffect(() => {
@@ -106,7 +120,8 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
       const payload = formatAssetPayloadForQr({
         code: qrCodeModalAsset.code,
         name: qrCodeModalAsset.name,
-        room: qrCodeModalAsset.location.room
+        room: qrCodeModalAsset.location.room,
+        serialNumber: qrCodeModalAsset.serialNumber || 'N/A'
       });
       generateQrCodeDataUrl(payload).then(url => setGeneratedQrDataUrl(url));
     }
@@ -117,6 +132,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
     const matchesSearch =
       asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asset.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (asset.detentorResponsavel && asset.detentorResponsavel.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (asset.brand && asset.brand.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (asset.serialNumber && asset.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -127,11 +143,31 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
     return matchesSearch && matchesCategory && matchesRoom && matchesStatus;
   });
 
+  // Handle Confirm Delete Asset
+  const handleConfirmDeleteAsset = () => {
+    if (!assetToDelete) return;
+    const target = assetToDelete;
+    const success = StorageService.deleteAsset(target.id, currentUser);
+    if (success) {
+      if (activeAssetModal?.id === target.id) {
+        setActiveAssetModal(null);
+      }
+      if (formAsset.id === target.id) {
+        setIsEditModalOpen(false);
+      }
+      setAssetToDelete(null);
+      onRefreshAssets();
+      showNotification(`Material "${target.name}" (${target.code}) foi excluído com sucesso!`, 'success');
+    } else {
+      showNotification(`Falha ao excluir o material "${target.name}". Item não localizado.`, 'error');
+    }
+  };
+
   // Handle Save New or Edit Asset
   const handleSaveAssetForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formAsset.code || !formAsset.name) {
-      alert('Código e nome são obrigatórios.');
+      showNotification('Código e nome são obrigatórios para salvar o material.', 'error');
       return;
     }
 
@@ -144,6 +180,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
       name: formAsset.name,
       description: formAsset.description || '',
       category: (formAsset.category as AssetCategory) || 'Informatica',
+      detentorResponsavel: formAsset.detentorResponsavel?.trim() || selectedRoomObj.responsible || currentUser.name,
       brand: formAsset.brand || '',
       model: formAsset.model || '',
       serialNumber: formAsset.serialNumber || '',
@@ -179,6 +216,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
     onRefreshAssets();
     setIsEditModalOpen(false);
     setActiveAssetModal(assetToSave);
+    showNotification(isNew ? `Material "${assetToSave.name}" (${assetToSave.code}) cadastrado com sucesso!` : `Material "${assetToSave.name}" atualizado com sucesso!`);
   };
 
   // Handle Transfer Asset
@@ -269,43 +307,303 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
     setActiveAssetModal(updated);
   };
 
-  // Print Label Sheet
+  // Download PNG in 360 DPI for Brother PT-P900W / P-touch Editor
+  const handleDownloadBrotherPtouchImage = (asset: PatrimonialAsset) => {
+    if (!asset || !generatedQrDataUrl) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 850; // 60mm at 360 dpi (Brother PT-P900W native resolution)
+    canvas.height = 510; // 36mm at 360 dpi
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Background white (TZe tape)
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 850, 510);
+
+    // Border line
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(16, 16, 818, 478);
+
+    // Header top bar
+    ctx.beginPath();
+    ctx.moveTo(16, 68);
+    ctx.lineTo(834, 68);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+
+    // Header text
+    ctx.fillStyle = '#000000';
+    ctx.font = '900 27px Arial, Helvetica, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CONTROLE PATRIMONIAL - ESSgt', 425, 52);
+    ctx.textAlign = 'left';
+
+    const qrImg = new Image();
+    qrImg.onload = () => {
+      // Draw QR Code in pure black
+      ctx.drawImage(qrImg, 34, 88, 360, 360);
+
+      // Vertical separator
+      ctx.beginPath();
+      ctx.moveTo(414, 76);
+      ctx.lineTo(414, 480);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#999999';
+      ctx.stroke();
+
+      // Nº PATRIMÔNIO
+      ctx.fillStyle = '#444444';
+      ctx.font = 'bold 18px Arial, sans-serif';
+      ctx.fillText('Nº PATRIMÔNIO', 434, 115);
+
+      ctx.fillStyle = '#000000';
+      ctx.font = '900 44px "Courier New", Courier, monospace';
+      ctx.fillText(asset.code, 434, 162);
+
+      // Horizontal separator line
+      ctx.beginPath();
+      ctx.moveTo(434, 185);
+      ctx.lineTo(820, 185);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#cccccc';
+      ctx.stroke();
+
+      // DESCRIÇÃO DO MATERIAL (Fonte aumentada)
+      ctx.fillStyle = '#444444';
+      ctx.font = 'bold 18px Arial, sans-serif';
+      ctx.fillText('DESCRIÇÃO DO MATERIAL', 434, 215);
+
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 30px Arial, Helvetica, sans-serif';
+      // Word wrap text
+      const words = (asset.name || '').split(' ');
+      let line1 = '';
+      let line2 = '';
+      for (const w of words) {
+        if ((line1 + ' ' + w).trim().length < 20) {
+          line1 = (line1 ? line1 + ' ' : '') + w;
+        } else if ((line2 + ' ' + w).trim().length < 22) {
+          line2 = (line2 ? line2 + ' ' : '') + w;
+        }
+      }
+      ctx.fillText(line1, 434, 255);
+      if (line2) {
+        ctx.fillText(line2, 434, 296);
+      }
+
+      // Horizontal separator line
+      ctx.beginPath();
+      ctx.moveTo(434, 380);
+      ctx.lineTo(820, 380);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#cccccc';
+      ctx.stroke();
+
+      // Nº DE SÉRIE (Fonte aumentada)
+      ctx.fillStyle = '#444444';
+      ctx.font = 'bold 18px Arial, sans-serif';
+      ctx.fillText('Nº DE SÉRIE', 434, 412);
+
+      ctx.fillStyle = '#000000';
+      ctx.font = '900 38px "Courier New", Courier, monospace';
+      const snText = asset.serialNumber && asset.serialNumber.trim() ? `S/N: ${asset.serialNumber}` : 'S/N: N/A';
+      ctx.fillText(snText, 434, 456);
+
+      // Trigger download
+      const link = document.createElement('a');
+      link.download = `Plaqueta_Brother_36x60mm_${asset.code}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+    qrImg.src = generatedQrDataUrl;
+  };
+
+  // Print Label Sheet - Brother PT-P900W (Largura 36 mm x Comprimento 60 mm)
   const handlePrintLabel = (asset: PatrimonialAsset) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    const serialNum = asset.serialNumber && asset.serialNumber.trim() ? asset.serialNumber.trim() : 'N/A';
+    const assetName = asset.name || 'Sem Descrição';
+    const assetCode = asset.code || 'PAT-0000';
+
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html>
+      <html lang="pt-BR">
         <head>
-          <title>Etiqueta Patrimonial - ${asset.code}</title>
+          <meta charset="UTF-8">
+          <title>Plaqueta Brother PT-P900W - ${assetCode}</title>
           <style>
-            body { font-family: sans-serif; margin: 20px; text-align: center; }
-            .label-box {
-              width: 320px;
-              border: 2px solid #000;
-              padding: 12px;
-              margin: 0 auto;
-              border-radius: 8px;
+            @page {
+              size: 60mm 36mm;
+              margin: 0;
             }
-            .title { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #444; }
-            .code { font-size: 18px; font-weight: bold; font-family: monospace; margin: 4px 0; }
-            .name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
-            .info { font-size: 10px; color: #666; margin-top: 4px; }
-            img { width: 140px; height: 140px; margin: 8px 0; }
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            html, body {
+              width: 60mm;
+              height: 36mm;
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #000000;
+              overflow: hidden;
+            }
+            .brother-label-wrapper {
+              width: 60mm;
+              height: 36mm;
+              padding: 1.4mm 1.8mm;
+              border: 0.4mm solid #000000;
+              border-radius: 1mm;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              background: #ffffff;
+              box-sizing: border-box;
+            }
+            .label-header {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-bottom: 0.35mm solid #000000;
+              padding-bottom: 0.45mm;
+              margin-bottom: 0.65mm;
+              text-align: center;
+            }
+            .header-title {
+              font-size: 6.2pt;
+              font-weight: 900;
+              letter-spacing: 0.25pt;
+              text-transform: uppercase;
+              text-align: center;
+              width: 100%;
+            }
+            .label-body {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              flex: 1;
+              gap: 1.5mm;
+              overflow: hidden;
+            }
+            .qr-col {
+              width: 25.5mm;
+              height: 25.5mm;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
+              background: #ffffff;
+            }
+            .qr-col img {
+              width: 25.5mm;
+              height: 25.5mm;
+              display: block;
+              image-rendering: -webkit-optimize-contrast;
+              image-rendering: pixelated;
+              object-fit: contain;
+            }
+            .info-col {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              height: 100%;
+              min-width: 0;
+              text-align: left;
+              padding-left: 0.5mm;
+            }
+            .field-label {
+              font-size: 4.4pt;
+              font-weight: 700;
+              text-transform: uppercase;
+              color: #333333;
+              line-height: 1;
+            }
+            .code-value {
+              font-size: 9pt;
+              font-weight: 900;
+              font-family: "Courier New", Courier, monospace;
+              letter-spacing: -0.2pt;
+              line-height: 1.05;
+              color: #000000;
+              margin-bottom: 0.4mm;
+            }
+            .desc-value {
+              font-size: 7.5pt;
+              font-weight: 800;
+              line-height: 1.15;
+              color: #000000;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
+              overflow: hidden;
+              margin-bottom: 0.4mm;
+            }
+            .serial-block {
+              border-top: 0.25mm solid #666666;
+              padding-top: 0.4mm;
+            }
+            .serial-value {
+              font-size: 8pt;
+              font-weight: 900;
+              font-family: "Courier New", Courier, monospace;
+              color: #000000;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            @media print {
+              body {
+                margin: 0;
+                padding: 0;
+              }
+              .brother-label-wrapper {
+                border: 0.35mm solid #000000;
+              }
+            }
           </style>
         </head>
         <body>
-          <div class="label-box">
-            <div class="title">Controle Patrimonial Permanente</div>
-            <div class="code">${asset.code}</div>
-            <div class="name">${asset.name}</div>
-            <img src="${generatedQrDataUrl || ''}" alt="QR Code" />
-            <div class="info">Local: ${asset.location.room}</div>
-            <div class="info">Responsável: ${asset.location.responsiblePerson}</div>
+          <div class="brother-label-wrapper">
+            <div class="label-header">
+              <span class="header-title">CONTROLE PATRIMONIAL - ESSgt</span>
+            </div>
+            <div class="label-body">
+              <div class="qr-col">
+                <img src="${generatedQrDataUrl || ''}" alt="QR Code" />
+              </div>
+              <div class="info-col">
+                <div>
+                  <div class="field-label">Nº Patrimônio</div>
+                  <div class="code-value">${assetCode}</div>
+                </div>
+                <div>
+                  <div class="field-label">Descrição do Material</div>
+                  <div class="desc-value" title="${assetName}">${assetName}</div>
+                </div>
+                <div class="serial-block">
+                  <div class="field-label">Nº de Série</div>
+                  <div class="serial-value">S/N: ${serialNum}</div>
+                </div>
+              </div>
+            </div>
           </div>
           <script>
-            setTimeout(() => { window.print(); window.close(); }, 500);
+            window.onload = function() {
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 400);
+            };
           </script>
         </body>
       </html>
@@ -315,6 +613,31 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Feedback Toast Notification */}
+      {feedbackMsg && (
+        <div className={`p-4 rounded-xl text-xs flex items-center justify-between border transition-all ${
+          feedbackMsg.type === 'success' 
+            ? 'bg-emerald-950/60 border-emerald-700/50 text-emerald-300' 
+            : 'bg-rose-950/60 border-rose-700/50 text-rose-300'
+        }`}>
+          <div className="flex items-center space-x-2">
+            {feedbackMsg.type === 'success' ? (
+              <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+            )}
+            <span className="font-medium">{feedbackMsg.text}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setFeedbackMsg(null)} 
+            className="p-1 hover:opacity-75 text-slate-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 p-5 rounded-2xl border border-slate-800">
         <div>
@@ -341,7 +664,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
             <span>Ler Plaqueta QR</span>
           </button>
 
-          {isAdmin && (
+          {canManage && (
             <button
               onClick={() => {
                 setFormAsset({
@@ -349,6 +672,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   name: '',
                   description: '',
                   category: 'Informatica',
+                  detentorResponsavel: currentUser.name,
                   condition: 'novo',
                   status: 'em_uso',
                   acquisitionValue: 2500,
@@ -384,7 +708,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar por código (PAT-...), descrição, marca ou série..."
+            placeholder="Buscar por código (PAT-...), descrição, detentor responsável, marca ou série..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -489,9 +813,11 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                     <span className="truncate">{asset.location.room}</span>
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500">
-                    <span>Resp: {asset.location.responsiblePerson.split(' ')[0]}</span>
-                    <span className="font-mono font-medium text-slate-300">
+                  <div className="flex items-center justify-between text-[11px] pt-1 text-slate-400">
+                    <span className="truncate mr-2" title={`Detentor Responsável: ${asset.detentorResponsavel || asset.location.responsiblePerson}`}>
+                      Detentor: <strong className="text-slate-300 font-semibold">{asset.detentorResponsavel || asset.location.responsiblePerson}</strong>
+                    </span>
+                    <span className="font-mono font-medium text-slate-300 shrink-0">
                       R$ {asset.currentBookValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -519,16 +845,26 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                     <span>Detalhes</span>
                   </button>
 
-                  {isAdmin && (
+                  {canManage && (
                     <button
                       onClick={() => {
                         setFormAsset(asset);
                         setIsEditModalOpen(true);
                       }}
                       className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                      title="Editar Ativo"
+                      title="Editar Material"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {canDelete && (
+                    <button
+                      onClick={() => setAssetToDelete(asset)}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 border border-transparent hover:border-rose-800/60 transition-colors cursor-pointer"
+                      title="Excluir Material"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
@@ -563,15 +899,21 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
             <div className="p-6 space-y-6">
               {/* Quick Info Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-500 uppercase block">Localização</span>
                   <span className="font-semibold text-slate-200">{activeAssetModal.location.room}</span>
                   <span className="text-[10px] text-slate-400 block">{activeAssetModal.location.building}</span>
                 </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-indigo-800/40">
+                  <span className="text-[10px] text-indigo-400 font-bold uppercase block">Detentor Responsável</span>
+                  <span className="font-semibold text-indigo-200">{activeAssetModal.detentorResponsavel || activeAssetModal.location.responsiblePerson}</span>
+                  <span className="text-[10px] text-slate-400 block">Posse / Carga direta</span>
+                </div>
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Responsável</span>
+                  <span className="text-[10px] text-slate-500 uppercase block">Resp. da Sala</span>
                   <span className="font-semibold text-slate-200">{activeAssetModal.location.responsiblePerson}</span>
+                  <span className="text-[10px] text-slate-400 block">Gestão do setor</span>
                 </div>
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-500 uppercase block">Valor Contábil</span>
@@ -594,27 +936,53 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
               </div>
 
               {/* Action Toolbar inside Modal */}
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
-                <button
-                  onClick={() => {
-                    setQrCodeModalAsset(activeAssetModal);
-                  }}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
-                >
-                  <QrCode className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Gerar Etiqueta QR</span>
-                </button>
-
-                {isAdmin && (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
-                      setTargetRoom(activeAssetModal.location.room);
-                      setIsMoveModalOpen(true);
+                      setQrCodeModalAsset(activeAssetModal);
                     }}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center space-x-1.5"
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors"
                   >
-                    <ArrowRightLeft className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Transferir Sala</span>
+                    <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Gerar Etiqueta QR</span>
+                  </button>
+
+                  {canManage && (
+                    <button
+                      onClick={() => {
+                        setTargetRoom(activeAssetModal.location.room);
+                        setIsMoveModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+                    >
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Transferir Sala</span>
+                    </button>
+                  )}
+
+                  {canManage && (
+                    <button
+                      onClick={() => {
+                        setFormAsset(activeAssetModal);
+                        setIsEditModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Editar Material</span>
+                    </button>
+                  )}
+                </div>
+
+                {canDelete && (
+                  <button
+                    onClick={() => setAssetToDelete(activeAssetModal)}
+                    className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
+                    title="Excluir Material"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Excluir Material</span>
                   </button>
                 )}
               </div>
@@ -715,64 +1083,135 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
         </div>
       )}
 
-      {/* --- QR CODE & PRINT MODAL --- */}
+      {/* --- QR CODE & PRINT MODAL - BROTHER PT-P900W (36 mm x 60 mm) --- */}
       {qrCodeModalAsset && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-sm text-white">Plaqueta Patrimonial QR</span>
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 text-center space-y-4 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="text-left">
+                <div className="flex items-center space-x-2">
+                  <span className="p-1.5 rounded-lg bg-indigo-950 text-indigo-400 border border-indigo-800">
+                    <Printer className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-bold text-sm text-white">Plaqueta Patrimonial QR</h3>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Dimensões: <strong>Largura 36 mm x Comprimento 60 mm</strong> (Rotuladora Brother PT-P900W)
+                </p>
+              </div>
               <button
                 onClick={() => setQrCodeModalAsset(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border-2 border-slate-300 inline-block shadow-inner">
-              <div className="text-[11px] font-bold text-slate-600 uppercase">
-                Patrimônio Registrado
+            {/* Label Visual Simulation in real 60mm x 36mm proportion (5:3 ratio) */}
+            <div className="flex flex-col items-center justify-center py-2">
+              <div className="text-[10px] text-slate-400 font-mono mb-2 flex items-center space-x-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>Fita Brother TZe 36 mm • Comprimento 60 mm</span>
               </div>
-              <div className="font-mono font-black text-xl text-slate-950 my-1">
-                {qrCodeModalAsset.code}
-              </div>
-              {generatedQrDataUrl ? (
-                <img
-                  src={generatedQrDataUrl}
-                  alt={`QR Code ${qrCodeModalAsset.code}`}
-                  className="w-48 h-48 mx-auto my-2"
-                />
-              ) : (
-                <div className="w-48 h-48 bg-slate-100 flex items-center justify-center text-xs text-slate-400 mx-auto">
-                  Gerando QR...
+
+              {/* Physical Tag representation */}
+              <div className="w-full max-w-[420px] aspect-[60/36] bg-white rounded-xl border-2 border-black p-3 text-black shadow-2xl flex flex-col justify-between relative overflow-hidden select-none">
+                {/* Header line on label */}
+                <div className="flex items-center justify-center border-b border-black pb-1 mb-1.5 text-center">
+                  <span className="text-[9.5px] font-black tracking-wider uppercase text-black text-center w-full">
+                    CONTROLE PATRIMONIAL - ESSgt
+                  </span>
                 </div>
-              )}
-              <div className="text-xs font-semibold text-slate-800 line-clamp-1">
-                {qrCodeModalAsset.name}
-              </div>
-              <div className="text-[10px] text-slate-500 mt-1">
-                {qrCodeModalAsset.location.room}
+
+                {/* Body: Left QR Code, Right Asset Details */}
+                <div className="flex items-center justify-between gap-3 flex-1 min-h-0">
+                  {/* QR Code Container */}
+                  <div className="w-[38%] h-full flex items-center justify-center bg-white shrink-0">
+                    {generatedQrDataUrl ? (
+                      <img
+                        src={generatedQrDataUrl}
+                        alt={`QR Code ${qrCodeModalAsset.code}`}
+                        className="w-full h-full object-contain"
+                        style={{ imageRendering: 'pixelated' }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-[10px] text-slate-500">
+                        Gerando QR...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Information Details Container */}
+                  <div className="w-[62%] h-full flex flex-col justify-between text-left min-w-0 pr-0.5">
+                    {/* 1. Nº Patrimônio */}
+                    <div>
+                      <span className="text-[7.5px] uppercase font-bold text-slate-600 block leading-tight">
+                        Nº Patrimônio
+                      </span>
+                      <span className="font-mono font-black text-sm text-black tracking-tight block leading-tight">
+                        {qrCodeModalAsset.code}
+                      </span>
+                    </div>
+
+                    {/* 2. Descrição do Material (Fonte aumentada) */}
+                    <div className="my-0.5">
+                      <span className="text-[7.5px] uppercase font-bold text-slate-600 block leading-tight">
+                        Descrição do Material
+                      </span>
+                      <p className="text-[11.5px] font-extrabold text-slate-900 line-clamp-2 leading-tight" title={qrCodeModalAsset.name}>
+                        {qrCodeModalAsset.name}
+                      </p>
+                    </div>
+
+                    {/* 3. Nº de Série (Fonte aumentada) */}
+                    <div className="pt-0.5 border-t border-slate-300">
+                      <span className="text-[7.5px] uppercase font-bold text-slate-600 block leading-tight">
+                        Nº de Série
+                      </span>
+                      <span className="font-mono font-black text-[11px] text-black truncate block leading-tight">
+                        S/N: {qrCodeModalAsset.serialNumber?.trim() || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-2">
+            {/* Hardware specifications badge */}
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-left text-xs space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Rotuladora de Mesa:</span>
+                <strong className="text-white">Brother PT-P900W</strong>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Dimensão da Plaqueta:</span>
+                <span className="text-indigo-300 font-mono font-semibold">Largura 36 mm x Comprimento 60 mm</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Campos Impressos:</span>
+                <span className="text-slate-300">QR Code • Nº Patrimônio • Descrição • Nº de Série</span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 onClick={() => handlePrintLabel(qrCodeModalAsset)}
-                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+                className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition-colors shadow-lg shadow-indigo-600/30 cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>Imprimir Etiqueta</span>
+                <span>Imprimir na Brother PT-P900W</span>
               </button>
-              {generatedQrDataUrl && (
-                <a
-                  href={generatedQrDataUrl}
-                  download={`QR_${qrCodeModalAsset.code}.png`}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center"
-                  title="Baixar Imagem PNG"
-                >
-                  <Download className="w-4 h-4" />
-                </a>
-              )}
+
+              <button
+                onClick={() => handleDownloadBrotherPtouchImage(qrCodeModalAsset)}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                title="Baixar imagem em 360 DPI para importar no software Brother P-touch Editor"
+              >
+                <Download className="w-4 h-4 text-indigo-400" />
+                <span>Baixar PNG (360 DPI)</span>
+              </button>
             </div>
           </div>
         </div>
@@ -931,33 +1370,55 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-300 mb-1">Sala / Local de Alocação*</label>
-                <select
-                  value={formAsset.location?.room}
-                  onChange={(e) => {
-                    const roomObj = roomsList.find(r => r.name === e.target.value);
-                    if (roomObj) {
-                      setFormAsset({
-                        ...formAsset,
-                        location: {
-                          building: roomObj.building,
-                          floor: roomObj.floor,
-                          room: roomObj.name,
-                          fullAddress: `${roomObj.building}, ${roomObj.name}`,
-                          responsiblePerson: roomObj.responsible
-                        }
-                      });
-                    }
-                  }}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                >
-                  {roomsList.map((r) => (
-                    <option key={r.id} value={r.name}>
-                      {r.name} ({r.building}) - Resp: {r.responsible}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Sala / Local de Alocação*</label>
+                  <select
+                    value={formAsset.location?.room}
+                    onChange={(e) => {
+                      const roomObj = roomsList.find(r => r.name === e.target.value);
+                      if (roomObj) {
+                        setFormAsset({
+                          ...formAsset,
+                          location: {
+                            building: roomObj.building,
+                            floor: roomObj.floor,
+                            room: roomObj.name,
+                            fullAddress: `${roomObj.building}, ${roomObj.name}`,
+                            responsiblePerson: roomObj.responsible
+                          }
+                        });
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                  >
+                    {roomsList.map((r) => (
+                      <option key={r.id} value={r.name}>
+                        {r.name} ({r.building}) - Resp: {r.responsible}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Detentor Responsável*</label>
+                  <input
+                    type="text"
+                    list="detentor-users-list"
+                    value={formAsset.detentorResponsavel || ''}
+                    onChange={(e) => setFormAsset({ ...formAsset, detentorResponsavel: e.target.value })}
+                    placeholder="Nome do detentor / custodiante"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white placeholder-slate-500"
+                  />
+                  <datalist id="detentor-users-list">
+                    {usersList.map((u) => (
+                      <option key={u.id} value={u.name}>{u.department} ({u.role})</option>
+                    ))}
+                  </datalist>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Pessoa física com a guarda e posse direta do bem
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -997,22 +1458,143 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-300"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold text-white"
-                >
-                  Salvar Patrimônio
-                </button>
+              <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+                {formAsset.id && canDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const found = assets.find(a => a.id === formAsset.id);
+                      if (found) setAssetToDelete(found);
+                    }}
+                    className="px-3.5 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Excluir Material</span>
+                  </button>
+                ) : <div />}
+
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold text-slate-300 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-semibold text-white transition-colors"
+                  >
+                    Salvar Patrimônio
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- CONFIRM DELETE MODAL / POPUP --- */}
+      {assetToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-800/60 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center space-x-3 pb-3 border-b border-slate-800">
+              <span className="p-2.5 rounded-xl bg-rose-950 text-rose-400 border border-rose-800/60">
+                <AlertTriangle className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-bold text-base text-white">Confirmar Exclusão de Material</h3>
+                <p className="text-[11px] text-slate-400">Esta ação é permanente e removerá o item do inventário.</p>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="py-4 space-y-3.5 text-xs">
+              <p className="text-slate-300">
+                Tem certeza de que deseja excluir o seguinte material e ativo patrimoniado do sistema?
+              </p>
+
+              {/* Asset Details Card */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono font-bold text-xs bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded">
+                    {assetToDelete.code}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      assetToDelete.condition === 'novo' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                      assetToDelete.condition === 'bom' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                      'bg-rose-950 text-rose-300 border border-rose-800'
+                    }`}>
+                      {assetToDelete.condition === 'novo' ? 'Novo' : assetToDelete.condition === 'bom' ? 'Bom' : 'Danificado'}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      assetToDelete.status === 'em_uso' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                      assetToDelete.status === 'disponivel' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
+                      'bg-rose-950 text-rose-300 border border-rose-800'
+                    }`}>
+                      {assetToDelete.status === 'em_uso' ? 'Em Uso' : assetToDelete.status === 'disponivel' ? 'Disponível' : 'Descarga'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="font-bold text-white text-sm">{assetToDelete.name}</div>
+                  <div className="text-slate-400 text-[11px]">
+                    {assetToDelete.category} {assetToDelete.brand ? `• ${assetToDelete.brand}` : ''} {assetToDelete.model ? `(${assetToDelete.model})` : ''}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-slate-500 block">Localização:</span>
+                    <span className="text-slate-300 font-medium">{assetToDelete.location.room}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Detentor Responsável:</span>
+                    <span className="text-indigo-300 font-semibold">{assetToDelete.detentorResponsavel || assetToDelete.location.responsiblePerson}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Valor Contábil:</span>
+                    <span className="text-emerald-400 font-medium font-mono">
+                      R$ {assetToDelete.currentBookValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Documentos/Anexos:</span>
+                    <span className="text-slate-300 font-medium">{assetToDelete.attachments.length} anexo(s)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warning box */}
+              <div className="p-3 bg-rose-950/30 border border-rose-800/50 rounded-xl text-rose-300 text-[11px] flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <span>
+                  O material será removido de todos os mapas de carga, relatórios e contagens patrimoniais. A exclusão será registrada na <strong>Trilha de Auditoria</strong> com a identificação de <strong>{currentUser.name}</strong>.
+                </span>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setAssetToDelete(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold text-slate-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAsset}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-lg shadow-rose-950/50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Sim, Excluir Material</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

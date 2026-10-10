@@ -201,6 +201,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                   <th className="py-2.5 px-3">Descrição</th>
                   <th className="py-2.5 px-3">Categoria</th>
                   <th className="py-2.5 px-3">Sala Alocação</th>
+                  <th className="py-2.5 px-3">Detentor</th>
                   <th className="py-2.5 px-3">Valor (R$)</th>
                   <th className="py-2.5 px-3">Estado</th>
                 </tr>
@@ -225,6 +226,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                     <td className="py-2.5 px-3 font-medium text-white">{row.name}</td>
                     <td className="py-2.5 px-3">{row.category}</td>
                     <td className="py-2.5 px-3">{row.room}</td>
+                    <td className="py-2.5 px-3 font-medium text-slate-300">{row.detentorResponsavel || row.responsiblePerson || '-'}</td>
                     <td className="py-2.5 px-3 text-emerald-400 font-mono">
                       R$ {row.acquisitionValue.toFixed(2)}
                     </td>
