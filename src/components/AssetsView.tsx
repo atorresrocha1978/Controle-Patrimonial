@@ -76,19 +76,29 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
   // New / Edit Asset Form State
   const [formAsset, setFormAsset] = useState<Partial<PatrimonialAsset>>({
+    codUnidade: 'ESSgt - 160136',
+    codMaterial: '',
     code: '',
+    serialNumber: '',
+    ne: '',
+    nl: '',
     name: '',
-    description: '',
-    category: 'Informatica',
-    detentorResponsavel: currentUser.name,
-    condition: 'novo',
-    status: 'em_uso',
+    especificacoes: '',
     acquisitionValue: 1000,
+    dataInclusao: new Date().toISOString().split('T')[0],
     acquisitionDate: new Date().toISOString().split('T')[0],
+    fam: '',
+    dom: '',
+    bam: '',
+    contaPat: '1.2.3.1.1.01.00',
+    category: 'Informatica',
+    status: 'em_uso',
+    condition: 'novo',
+    detentorResponsavel: currentUser.name,
     annualDepreciationRate: 20,
     brand: '',
     model: '',
-    serialNumber: '',
+    description: '',
     location: {
       building: 'Bloco A - Engenharia',
       floor: '1º Andar',
@@ -120,21 +130,33 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
       const payload = formatAssetPayloadForQr({
         code: qrCodeModalAsset.code,
         name: qrCodeModalAsset.name,
-        room: qrCodeModalAsset.location.room,
+        room: qrCodeModalAsset.location?.room || 'Almoxarifado Central',
         serialNumber: qrCodeModalAsset.serialNumber || 'N/A'
       });
       generateQrCodeDataUrl(payload).then(url => setGeneratedQrDataUrl(url));
     }
   }, [qrCodeModalAsset]);
 
-  // Filtered Assets
+  // Filtered Assets across all official fields
   const filteredAssets = assets.filter((asset) => {
+    const term = searchTerm.toLowerCase().trim();
     const matchesSearch =
-      asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      asset.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (asset.detentorResponsavel && asset.detentorResponsavel.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (asset.brand && asset.brand.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (asset.serialNumber && asset.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      !term ||
+      (asset.name && asset.name.toLowerCase().includes(term)) ||
+      (asset.code && asset.code.toLowerCase().includes(term)) ||
+      (asset.codUnidade && asset.codUnidade.toLowerCase().includes(term)) ||
+      (asset.codMaterial && asset.codMaterial.toLowerCase().includes(term)) ||
+      (asset.serialNumber && asset.serialNumber.toLowerCase().includes(term)) ||
+      (asset.ne && asset.ne.toLowerCase().includes(term)) ||
+      (asset.nl && asset.nl.toLowerCase().includes(term)) ||
+      (asset.fam && asset.fam.toLowerCase().includes(term)) ||
+      (asset.dom && asset.dom.toLowerCase().includes(term)) ||
+      (asset.bam && asset.bam.toLowerCase().includes(term)) ||
+      (asset.contaPat && asset.contaPat.toLowerCase().includes(term)) ||
+      (asset.detentorResponsavel && asset.detentorResponsavel.toLowerCase().includes(term)) ||
+      (asset.location?.room && asset.location.room.toLowerCase().includes(term)) ||
+      (asset.especificacoes && asset.especificacoes.toLowerCase().includes(term)) ||
+      (asset.brand && asset.brand.toLowerCase().includes(term));
 
     const matchesCategory = categoryFilter === 'all' || asset.category === categoryFilter;
     const matchesRoom = roomFilter === 'all' || asset.location.room === roomFilter;
@@ -167,23 +189,42 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   const handleSaveAssetForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formAsset.code || !formAsset.name) {
-      showNotification('Código e nome são obrigatórios para salvar o material.', 'error');
+      showNotification('Nº de Patrimônio e Nome do material são obrigatórios para salvar.', 'error');
       return;
     }
 
     const selectedRoomObj = roomsList.find(r => r.name === formAsset.location?.room) || roomsList[0];
 
     const isNew = !formAsset.id;
+    const dateNowStr = new Date().toISOString().split('T')[0];
+    const dataInclusaoFinal = formAsset.dataInclusao || formAsset.acquisitionDate || dateNowStr;
+
     const assetToSave: PatrimonialAsset = {
       id: formAsset.id || `ast-${Date.now()}`,
-      code: formAsset.code.toUpperCase(),
-      name: formAsset.name,
-      description: formAsset.description || '',
-      category: (formAsset.category as AssetCategory) || 'Informatica',
+      // Campos Oficiais de Ativo Patrimonial
+      codUnidade: formAsset.codUnidade?.trim() || 'ESSgt - 160136',
+      codMaterial: formAsset.codMaterial?.trim() || `MAT-${formAsset.code?.replace(/\D/g, '') || Date.now()}`,
+      code: formAsset.code.toUpperCase().trim(),
+      serialNumber: formAsset.serialNumber?.trim() || '',
+      ne: formAsset.ne?.trim() || '',
+      nl: formAsset.nl?.trim() || '',
+      name: formAsset.name.trim(),
+      especificacoes: formAsset.especificacoes?.trim() || formAsset.description?.trim() || '',
+      acquisitionValue: Number(formAsset.acquisitionValue) || 0,
+      dataInclusao: dataInclusaoFinal,
+      acquisitionDate: dataInclusaoFinal,
+      fam: formAsset.fam?.trim() || '',
+      dom: formAsset.dom?.trim() || '',
+      bam: formAsset.bam?.trim() || '',
+      contaPat: formAsset.contaPat?.trim() || '1.2.3.1.1.01.00',
       detentorResponsavel: formAsset.detentorResponsavel?.trim() || selectedRoomObj.responsible || currentUser.name,
+      status: (formAsset.status as AssetStatus) || 'em_uso',
+      category: (formAsset.category as AssetCategory) || 'Informatica',
+
+      // Complementares
+      description: formAsset.especificacoes?.trim() || formAsset.description || formAsset.name,
       brand: formAsset.brand || '',
       model: formAsset.model || '',
-      serialNumber: formAsset.serialNumber || '',
       location: {
         building: selectedRoomObj.building,
         floor: selectedRoomObj.floor,
@@ -191,17 +232,14 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
         fullAddress: `${selectedRoomObj.building}, ${selectedRoomObj.floor}, ${selectedRoomObj.name}`,
         responsiblePerson: selectedRoomObj.responsible
       },
-      status: (formAsset.status as AssetStatus) || 'em_uso',
       condition: (formAsset.condition as AssetCondition) || 'bom',
-      acquisitionDate: formAsset.acquisitionDate || new Date().toISOString().split('T')[0],
-      acquisitionValue: Number(formAsset.acquisitionValue) || 0,
       currentBookValue: Number(formAsset.acquisitionValue) * 0.85,
       annualDepreciationRate: Number(formAsset.annualDepreciationRate) || 15,
       attachments: formAsset.attachments || [],
       movementHistory: formAsset.movementHistory || [
         {
           id: `mov-${Date.now()}`,
-          date: new Date().toISOString().split('T')[0],
+          date: dateNowStr,
           fromLocation: 'Cadastro Inicial',
           toLocation: selectedRoomObj.name,
           responsibleUser: currentUser.name,
@@ -209,7 +247,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
         }
       ],
       syncedWithErp: false,
-      lastAuditedDate: new Date().toISOString().split('T')[0]
+      lastAuditedDate: dateNowStr
     };
 
     StorageService.saveAsset(assetToSave, currentUser, isNew);
@@ -667,26 +705,38 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           {canManage && (
             <button
               onClick={() => {
+                const nextNum = assets.length + 1;
+                const dateNow = new Date().toISOString().split('T')[0];
                 setFormAsset({
-                  code: `PAT-2026-${String(assets.length + 1).padStart(3, '0')}`,
+                  codUnidade: 'ESSgt - 160136',
+                  codMaterial: `MAT-${String(nextNum).padStart(4, '0')}`,
+                  code: `PAT-2026-${String(nextNum).padStart(3, '0')}`,
+                  serialNumber: '',
+                  ne: '',
+                  nl: '',
                   name: '',
-                  description: '',
-                  category: 'Informatica',
-                  detentorResponsavel: currentUser.name,
-                  condition: 'novo',
-                  status: 'em_uso',
+                  especificacoes: '',
                   acquisitionValue: 2500,
-                  acquisitionDate: new Date().toISOString().split('T')[0],
+                  dataInclusao: dateNow,
+                  acquisitionDate: dateNow,
+                  fam: '',
+                  dom: '',
+                  bam: '',
+                  contaPat: '1.2.3.1.1.01.00',
+                  category: 'Informatica',
+                  status: 'em_uso',
+                  condition: 'novo',
+                  detentorResponsavel: currentUser.name,
                   annualDepreciationRate: 20,
                   brand: '',
                   model: '',
-                  serialNumber: '',
+                  description: '',
                   location: {
-                    building: roomsList[0].building,
-                    floor: roomsList[0].floor,
-                    room: roomsList[0].name,
-                    fullAddress: `${roomsList[0].building}, ${roomsList[0].name}`,
-                    responsiblePerson: roomsList[0].responsible
+                    building: roomsList[0]?.building || 'Bloco A - Engenharia',
+                    floor: roomsList[0]?.floor || '1º Andar',
+                    room: roomsList[0]?.name || 'Laboratório de TI 101',
+                    fullAddress: `${roomsList[0]?.building || 'Bloco A'}, ${roomsList[0]?.name || 'Sala 101'}`,
+                    responsiblePerson: roomsList[0]?.responsible || currentUser.name
                   }
                 });
                 setIsEditModalOpen(true);
@@ -708,7 +758,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar por código (PAT-...), descrição, detentor responsável, marca ou série..."
+            placeholder="Buscar por Cód Unidade, Patrimônio, Cód Material, N. Série, NE, NL, Nome, FAM, Conta Pat ou Detentor..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -773,10 +823,22 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
             >
               <div>
                 {/* Card Header: Code & Status */}
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className="font-mono font-bold text-xs bg-indigo-950/70 text-indigo-300 border border-indigo-800/60 px-2 py-0.5 rounded-md">
-                    {asset.code}
-                  </span>
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono font-bold text-xs bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 px-2 py-0.5 rounded-md" title="Nº Patrimônio">
+                      {asset.code}
+                    </span>
+                    {asset.codMaterial && (
+                      <span className="font-mono text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.5 rounded" title="Cod Material">
+                        {asset.codMaterial}
+                      </span>
+                    )}
+                    {asset.codUnidade && (
+                      <span className="font-mono text-[9.5px] bg-emerald-950/50 text-emerald-300 border border-emerald-800/50 px-1.5 py-0.5 rounded" title="Cód Unidade Gestora">
+                        {asset.codUnidade}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
@@ -798,27 +860,52 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Title and Description */}
+                {/* Title and Category */}
                 <h3 className="font-bold text-sm text-white group-hover:text-indigo-200 transition-colors line-clamp-1">
                   {asset.name}
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
-                  {asset.description}
-                </p>
+
+                <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
+                  <span className="text-indigo-400 font-medium">{asset.category}</span>
+                  {asset.serialNumber && (
+                    <span className="font-mono text-slate-400">
+                      S/N: {asset.serialNumber}
+                    </span>
+                  )}
+                </div>
+
+                {/* Badges Administrativos Rápidos (NE, NL, Conta Pat) */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                  {asset.contaPat && (
+                    <span className="text-[9.5px] bg-slate-950 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800 font-mono">
+                      Conta: {asset.contaPat}
+                    </span>
+                  )}
+                  {asset.ne && (
+                    <span className="text-[9.5px] bg-indigo-950/40 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-900/60 font-mono">
+                      NE: {asset.ne}
+                    </span>
+                  )}
+                  {asset.nl && (
+                    <span className="text-[9.5px] bg-sky-950/40 text-sky-300 px-1.5 py-0.5 rounded border border-sky-900/60 font-mono">
+                      NL: {asset.nl}
+                    </span>
+                  )}
+                </div>
 
                 {/* Metadata tags */}
-                <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-400">
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-400">
                   <div className="flex items-center space-x-1.5 truncate">
                     <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span className="truncate">{asset.location.room}</span>
+                    <span className="truncate">{asset.location?.room || 'Almoxarifado Central'}</span>
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] pt-1 text-slate-400">
-                    <span className="truncate mr-2" title={`Detentor Responsável: ${asset.detentorResponsavel || asset.location.responsiblePerson}`}>
-                      Detentor: <strong className="text-slate-300 font-semibold">{asset.detentorResponsavel || asset.location.responsiblePerson}</strong>
+                    <span className="truncate mr-2" title={`Detentor Responsável: ${asset.detentorResponsavel || asset.location?.responsiblePerson || 'Carlos Alberto Silva'}`}>
+                      Detentor: <strong className="text-slate-200 font-semibold">{asset.detentorResponsavel || asset.location?.responsiblePerson || 'Carlos Alberto Silva'}</strong>
                     </span>
-                    <span className="font-mono font-medium text-slate-300 shrink-0">
-                      R$ {asset.currentBookValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    <span className="font-mono font-bold text-emerald-400 shrink-0">
+                      R$ {asset.acquisitionValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
@@ -897,41 +984,164 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
-              {/* Quick Info Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Localização</span>
-                  <span className="font-semibold text-slate-200">{activeAssetModal.location.room}</span>
-                  <span className="text-[10px] text-slate-400 block">{activeAssetModal.location.building}</span>
-                </div>
-                <div className="bg-slate-950 p-3 rounded-xl border border-indigo-800/40">
-                  <span className="text-[10px] text-indigo-400 font-bold uppercase block">Detentor Responsável</span>
-                  <span className="font-semibold text-indigo-200">{activeAssetModal.detentorResponsavel || activeAssetModal.location.responsiblePerson}</span>
-                  <span className="text-[10px] text-slate-400 block">Posse / Carga direta</span>
-                </div>
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Resp. da Sala</span>
-                  <span className="font-semibold text-slate-200">{activeAssetModal.location.responsiblePerson}</span>
-                  <span className="text-[10px] text-slate-400 block">Gestão do setor</span>
-                </div>
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Valor Contábil</span>
-                  <span className="font-semibold text-emerald-400">
-                    R$ {activeAssetModal.currentBookValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <div className="p-6 space-y-5">
+              {/* Painel Oficial de Campos do Ativo Patrimonial */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                    <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                    <span>Ficha de Ativo Patrimonial</span>
                   </span>
-                  <span className="text-[10px] text-slate-500 block">Original: R$ {activeAssetModal.acquisitionValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[11px] font-mono font-bold text-emerald-300 bg-emerald-950/70 border border-emerald-800/60 px-2 py-0.5 rounded">
+                      Cód Unidade: {activeAssetModal.codUnidade || 'ESSgt - 160136'}
+                    </span>
+                    <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-950/70 border border-indigo-800/60 px-2 py-0.5 rounded">
+                      Cód Mat: {activeAssetModal.codMaterial || 'N/A'}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      activeAssetModal.status === 'em_uso' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' :
+                      activeAssetModal.status === 'disponivel' ? 'bg-sky-950/60 text-sky-300 border border-sky-800/60' :
+                      'bg-rose-950/60 text-rose-300 border border-rose-800/60'
+                    }`}>
+                      {activeAssetModal.status === 'em_uso' ? 'Em Uso' : activeAssetModal.status === 'disponivel' ? 'Disponível' : 'Descarga'}
+                    </span>
+                  </div>
                 </div>
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Conservação</span>
-                  <span className={`font-semibold capitalize ${
-                    activeAssetModal.condition === 'novo' ? 'text-emerald-400' :
-                    activeAssetModal.condition === 'bom' ? 'text-blue-400' :
-                    'text-rose-400'
-                  }`}>
-                    {activeAssetModal.condition === 'novo' ? 'Novo' :
-                     activeAssetModal.condition === 'bom' ? 'Bom' : 'Danificado'}
-                  </span>
+
+                {/* Grid dos Campos Oficiais */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  {/* 1. Cod Unidade */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Cod Unidade</span>
+                    <span className="font-mono font-bold text-slate-200">{activeAssetModal.codUnidade || 'ESSgt - 160136'}</span>
+                  </div>
+
+                  {/* 2. Cod Material */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Cod Material</span>
+                    <span className="font-mono font-bold text-slate-200">{activeAssetModal.codMaterial || 'N/A'}</span>
+                  </div>
+
+                  {/* 3. Patrimônio */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-indigo-900/40">
+                    <span className="text-[10px] text-indigo-400 uppercase font-bold block">Patrimônio</span>
+                    <span className="font-mono font-black text-indigo-200 text-sm">{activeAssetModal.code}</span>
+                  </div>
+
+                  {/* 4. N. Série */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">N. Série</span>
+                    <span className="font-mono text-slate-200">{activeAssetModal.serialNumber?.trim() || 'N/A'}</span>
+                  </div>
+
+                  {/* 4. Categoria */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Categoria</span>
+                    <span className="font-semibold text-slate-200">{activeAssetModal.category}</span>
+                  </div>
+
+                  {/* 5. Sala/Local de Alocação */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sala/Local de Alocação</span>
+                    <span className="font-semibold text-slate-200">{activeAssetModal.location?.room || 'Almoxarifado Central'}</span>
+                  </div>
+
+                  {/* 6. Detentor Responsável */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-indigo-800/60 bg-indigo-950/20">
+                    <span className="text-[10px] text-indigo-400 uppercase font-bold block">Detentor Responsável</span>
+                    <span className="font-bold text-white truncate block" title={activeAssetModal.detentorResponsavel}>
+                      {activeAssetModal.detentorResponsavel || activeAssetModal.location?.responsiblePerson || 'Carlos Alberto Silva'}
+                    </span>
+                  </div>
+
+                  {/* 7. Valor */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Valor</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      R$ {activeAssetModal.acquisitionValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* 8. Data Inclusão */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Data Inclusão</span>
+                    <span className="font-mono text-slate-200">
+                      {activeAssetModal.dataInclusao || activeAssetModal.acquisitionDate || 'N/A'}
+                    </span>
+                  </div>
+
+                  {/* 9. NE */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">NE</span>
+                    <span className="font-mono text-slate-200">{activeAssetModal.ne || 'N/A'}</span>
+                  </div>
+
+                  {/* 10. NL */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">NL</span>
+                    <span className="font-mono text-slate-200">{activeAssetModal.nl || 'N/A'}</span>
+                  </div>
+
+                  {/* 11. FAM */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">FAM</span>
+                    <span className="font-mono text-slate-200">{activeAssetModal.fam || 'N/A'}</span>
+                  </div>
+
+                  {/* 12. Dom */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Dom</span>
+                    <span className="font-mono text-slate-200">{activeAssetModal.dom || 'N/A'}</span>
+                  </div>
+
+                  {/* 13. BAM */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">BAM</span>
+                    <span className="font-mono text-slate-200">{activeAssetModal.bam || 'N/A'}</span>
+                  </div>
+
+                  {/* 14. Conta Pat */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Conta Pat</span>
+                    <span className="font-mono text-slate-200 truncate block" title={activeAssetModal.contaPat}>
+                      {activeAssetModal.contaPat || 'N/A'}
+                    </span>
+                  </div>
+
+                  {/* 15. Status */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Status</span>
+                    <span className="font-semibold text-slate-200">
+                      {activeAssetModal.status === 'em_uso' ? 'Em Uso' : activeAssetModal.status === 'disponivel' ? 'Disponível' : 'Descarga'}
+                    </span>
+                  </div>
+
+                  {/* 16. Conservação */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Conservação</span>
+                    <span className={`font-semibold capitalize ${
+                      activeAssetModal.condition === 'novo' ? 'text-emerald-400' :
+                      activeAssetModal.condition === 'bom' ? 'text-blue-400' :
+                      'text-rose-400'
+                    }`}>
+                      {activeAssetModal.condition === 'novo' ? 'Novo' :
+                       activeAssetModal.condition === 'bom' ? 'Bom' : 'Danificado'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 17. Nome do material & Especificações */}
+                <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800 space-y-1">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Nome do Material</span>
+                  <div className="text-slate-100 font-bold text-xs">{activeAssetModal.name}</div>
+                </div>
+
+                <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800 space-y-1">
+                  <span className="text-[10px] text-indigo-400 uppercase font-bold block">Especificações</span>
+                  <p className="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap">
+                    {activeAssetModal.especificacoes || activeAssetModal.description || 'Sem especificações detalhadas cadastradas.'}
+                  </p>
                 </div>
               </div>
 
@@ -1230,7 +1440,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
               <div>
                 <label className="block font-semibold text-slate-300 mb-1">Localização Atual</label>
                 <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-slate-400">
-                  {activeAssetModal.location.room} ({activeAssetModal.location.building})
+                  {activeAssetModal.location?.room || 'Almoxarifado Central'} ({activeAssetModal.location?.building || 'Bloco A'})
                 </div>
               </div>
 
@@ -1296,166 +1506,296 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveAssetForm} className="space-y-4 pt-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Nº Patrimônio (Plaqueta)*</label>
-                  <input
-                    type="text"
-                    required
-                    value={formAsset.code}
-                    onChange={(e) => setFormAsset({ ...formAsset, code: e.target.value.toUpperCase() })}
-                    placeholder="PAT-2026-001"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono"
-                  />
+              {/* Bloco 1: Identificação do Material & Tombamento */}
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block">
+                  1. Identificação do Material & Tombamento
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Cod Unidade</label>
+                    <input
+                      type="text"
+                      value={formAsset.codUnidade || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, codUnidade: e.target.value })}
+                      placeholder="Ex: ESSgt - 160136"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Cod Material</label>
+                    <input
+                      type="text"
+                      value={formAsset.codMaterial || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, codMaterial: e.target.value.toUpperCase() })}
+                      placeholder="Ex: MAT-INF-0042"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Patrimônio*</label>
+                    <input
+                      type="text"
+                      required
+                      value={formAsset.code || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, code: e.target.value.toUpperCase() })}
+                      placeholder="Ex: PAT-2026-001"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">N. Série</label>
+                    <input
+                      type="text"
+                      value={formAsset.serialNumber || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, serialNumber: e.target.value })}
+                      placeholder="Ex: SN-994821"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Categoria*</label>
-                  <select
-                    value={formAsset.category}
-                    onChange={(e) => setFormAsset({ ...formAsset, category: e.target.value as AssetCategory })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                  >
-                    <option value="Informatica">Informática</option>
-                    <option value="Mobiliario">Mobiliário</option>
-                    <option value="Equipamentos">Equipamentos</option>
-                    <option value="Audiovisual">Audiovisual</option>
-                    <option value="Laboratorio">Laboratório</option>
-                    <option value="Veiculos">Veículos</option>
-                  </select>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block font-semibold text-slate-300 mb-1">Nome do Material*</label>
+                    <input
+                      type="text"
+                      required
+                      value={formAsset.name || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, name: e.target.value })}
+                      placeholder="Ex: Notebook Dell Latitude 5440 i7 32GB"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Categoria*</label>
+                    <select
+                      value={formAsset.category}
+                      onChange={(e) => setFormAsset({ ...formAsset, category: e.target.value as AssetCategory })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                    >
+                      <option value="Informatica">Informática</option>
+                      <option value="Mobiliario">Mobiliário</option>
+                      <option value="Equipamentos">Equipamentos</option>
+                      <option value="Audiovisual">Audiovisual</option>
+                      <option value="Laboratorio">Laboratório</option>
+                      <option value="Veiculos">Veículos</option>
+                      <option value="Ferramentas">Ferramentas</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Status*</label>
+                    <select
+                      value={formAsset.status}
+                      onChange={(e) => setFormAsset({ ...formAsset, status: e.target.value as AssetStatus })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                    >
+                      <option value="em_uso">Em Uso</option>
+                      <option value="disponivel">Disponível</option>
+                      <option value="descarga">Descarga</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Estado de Conservação</label>
+                    <select
+                      value={formAsset.condition}
+                      onChange={(e) => setFormAsset({ ...formAsset, condition: e.target.value as AssetCondition })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                    >
+                      <option value="novo">Novo</option>
+                      <option value="bom">Bom</option>
+                      <option value="danificado">Danificado</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-300 mb-1">Descrição do Material*</label>
-                <input
-                  type="text"
-                  required
-                  value={formAsset.name}
-                  onChange={(e) => setFormAsset({ ...formAsset, name: e.target.value })}
-                  placeholder="Ex: Notebook Lenovo ThinkPad T14 Gen 4"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+              {/* Bloco 2: Alocação & Detentor Responsável */}
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider block">
+                  2. Alocação & Custódia Direta
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Sala/Local de Alocação*</label>
+                    <select
+                      value={formAsset.location?.room}
+                      onChange={(e) => {
+                        const roomObj = roomsList.find(r => r.name === e.target.value);
+                        if (roomObj) {
+                          setFormAsset({
+                            ...formAsset,
+                            location: {
+                              building: roomObj.building,
+                              floor: roomObj.floor,
+                              room: roomObj.name,
+                              fullAddress: `${roomObj.building}, ${roomObj.name}`,
+                              responsiblePerson: roomObj.responsible
+                            }
+                          });
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                    >
+                      {roomsList.map((r) => (
+                        <option key={r.id} value={r.name}>
+                          {r.name} ({r.building}) - Resp: {r.responsible}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Detentor Responsável*</label>
+                    <input
+                      type="text"
+                      list="detentor-users-list"
+                      value={formAsset.detentorResponsavel || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, detentorResponsavel: e.target.value })}
+                      placeholder="Nome do detentor direto do material"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white placeholder-slate-500"
+                    />
+                    <datalist id="detentor-users-list">
+                      {usersList.map((u) => (
+                        <option key={u.id} value={u.name}>{u.department} ({u.role})</option>
+                      ))}
+                    </datalist>
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Responsável direto pela carga patrimonial e custódia
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 3: Dados Administrativos & Orçamentários */}
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                  3. Dados Administrativos, Documentais & Contábeis
+                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">NE (Nota de Empenho)</label>
+                    <input
+                      type="text"
+                      value={formAsset.ne || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, ne: e.target.value.toUpperCase() })}
+                      placeholder="Ex: 2024NE00018"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">NL (Nota de Lançamento)</label>
+                    <input
+                      type="text"
+                      value={formAsset.nl || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, nl: e.target.value.toUpperCase() })}
+                      placeholder="Ex: 2024NL00025"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">FAM</label>
+                    <input
+                      type="text"
+                      value={formAsset.fam || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, fam: e.target.value.toUpperCase() })}
+                      placeholder="Ex: FAM-001/2024"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Dom</label>
+                    <input
+                      type="text"
+                      value={formAsset.dom || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, dom: e.target.value.toUpperCase() })}
+                      placeholder="Ex: DOM-847291/24"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">BAM (Bol. Alteração)</label>
+                    <input
+                      type="text"
+                      value={formAsset.bam || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, bam: e.target.value.toUpperCase() })}
+                      placeholder="Ex: BAM-04/2024"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Conta Pat (Conta Patrimonial)</label>
+                    <input
+                      type="text"
+                      value={formAsset.contaPat || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, contaPat: e.target.value })}
+                      placeholder="Ex: 1.2.3.1.1.01.02"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 4: Financeiro & Entrada */}
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">
+                  4. Valores & Data de Inclusão
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Valor (R$)*</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={formAsset.acquisitionValue ?? 0}
+                      onChange={(e) => setFormAsset({ ...formAsset, acquisitionValue: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Data Inclusão*</label>
+                    <input
+                      type="date"
+                      required
+                      value={formAsset.dataInclusao || formAsset.acquisitionDate || ''}
+                      onChange={(e) => setFormAsset({ ...formAsset, dataInclusao: e.target.value, acquisitionDate: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 5: Especificações */}
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block">
+                  5. Especificações
+                </span>
+                <textarea
+                  rows={3}
+                  value={formAsset.especificacoes || formAsset.description || ''}
+                  onChange={(e) => setFormAsset({ ...formAsset, especificacoes: e.target.value, description: e.target.value })}
+                  placeholder="Detalhamento técnico completo, configuração, capacidades, dimensões e particularidades do material..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white leading-relaxed placeholder-slate-500"
                 />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Marca</label>
-                  <input
-                    type="text"
-                    value={formAsset.brand || ''}
-                    onChange={(e) => setFormAsset({ ...formAsset, brand: e.target.value })}
-                    placeholder="Dell, HP, etc."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Modelo</label>
-                  <input
-                    type="text"
-                    value={formAsset.model || ''}
-                    onChange={(e) => setFormAsset({ ...formAsset, model: e.target.value })}
-                    placeholder="Latitude 5440"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Nº de Série</label>
-                  <input
-                    type="text"
-                    value={formAsset.serialNumber || ''}
-                    onChange={(e) => setFormAsset({ ...formAsset, serialNumber: e.target.value })}
-                    placeholder="BR-99482"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Sala / Local de Alocação*</label>
-                  <select
-                    value={formAsset.location?.room}
-                    onChange={(e) => {
-                      const roomObj = roomsList.find(r => r.name === e.target.value);
-                      if (roomObj) {
-                        setFormAsset({
-                          ...formAsset,
-                          location: {
-                            building: roomObj.building,
-                            floor: roomObj.floor,
-                            room: roomObj.name,
-                            fullAddress: `${roomObj.building}, ${roomObj.name}`,
-                            responsiblePerson: roomObj.responsible
-                          }
-                        });
-                      }
-                    }}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                  >
-                    {roomsList.map((r) => (
-                      <option key={r.id} value={r.name}>
-                        {r.name} ({r.building}) - Resp: {r.responsible}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Detentor Responsável*</label>
-                  <input
-                    type="text"
-                    list="detentor-users-list"
-                    value={formAsset.detentorResponsavel || ''}
-                    onChange={(e) => setFormAsset({ ...formAsset, detentorResponsavel: e.target.value })}
-                    placeholder="Nome do detentor / custodiante"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white placeholder-slate-500"
-                  />
-                  <datalist id="detentor-users-list">
-                    {usersList.map((u) => (
-                      <option key={u.id} value={u.name}>{u.department} ({u.role})</option>
-                    ))}
-                  </datalist>
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Pessoa física com a guarda e posse direta do bem
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Valor Aquisição (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formAsset.acquisitionValue || 0}
-                    onChange={(e) => setFormAsset({ ...formAsset, acquisitionValue: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Estado de Conservação</label>
-                  <select
-                    value={formAsset.condition}
-                    onChange={(e) => setFormAsset({ ...formAsset, condition: e.target.value as AssetCondition })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                  >
-                    <option value="novo">Novo</option>
-                    <option value="bom">Bom</option>
-                    <option value="danificado">Danificado</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Status</label>
-                  <select
-                    value={formAsset.status}
-                    onChange={(e) => setFormAsset({ ...formAsset, status: e.target.value as AssetStatus })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
-                  >
-                    <option value="em_uso">Em Uso</option>
-                    <option value="disponivel">Disponível</option>
-                    <option value="descarga">Descarga</option>
-                  </select>
-                </div>
               </div>
 
               <div className="flex items-center justify-between pt-4 border-t border-slate-800">
@@ -1548,22 +1888,26 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
                 <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px]">
                   <div>
+                    <span className="text-slate-500 block">Cod Unidade:</span>
+                    <span className="font-mono text-emerald-400 font-medium">{assetToDelete.codUnidade || 'ESSgt - 160136'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Cod Material:</span>
+                    <span className="font-mono text-slate-300 font-medium">{assetToDelete.codMaterial || 'N/A'}</span>
+                  </div>
+                  <div>
                     <span className="text-slate-500 block">Localização:</span>
-                    <span className="text-slate-300 font-medium">{assetToDelete.location.room}</span>
+                    <span className="text-slate-300 font-medium">{assetToDelete.location?.room || 'Almoxarifado Central'}</span>
                   </div>
                   <div>
                     <span className="text-slate-500 block">Detentor Responsável:</span>
-                    <span className="text-indigo-300 font-semibold">{assetToDelete.detentorResponsavel || assetToDelete.location.responsiblePerson}</span>
+                    <span className="text-indigo-300 font-semibold">{assetToDelete.detentorResponsavel || assetToDelete.location?.responsiblePerson || 'Carlos Alberto Silva'}</span>
                   </div>
-                  <div>
-                    <span className="text-slate-500 block">Valor Contábil:</span>
+                  <div className="col-span-2">
+                    <span className="text-slate-500 block">Valor:</span>
                     <span className="text-emerald-400 font-medium font-mono">
-                      R$ {assetToDelete.currentBookValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {assetToDelete.acquisitionValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Documentos/Anexos:</span>
-                    <span className="text-slate-300 font-medium">{assetToDelete.attachments.length} anexo(s)</span>
                   </div>
                 </div>
               </div>

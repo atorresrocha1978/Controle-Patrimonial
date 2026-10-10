@@ -35,7 +35,7 @@ export const AuditsView: React.FC<AuditsViewProps> = ({
 
   const filteredAssets = selectedRoom === 'all' 
     ? assets 
-    : assets.filter(a => a.location.room === selectedRoom);
+    : assets.filter(a => a.location?.room === selectedRoom);
 
   // Compute compliance
   const totalInFilter = filteredAssets.length;
@@ -227,11 +227,11 @@ export const AuditsView: React.FC<AuditsViewProps> = ({
                       <div className="text-[11px] text-slate-400">{asset.brand} {asset.model}</div>
                     </td>
                     <td className="py-3 px-4 text-slate-300">
-                      {asset.location.room}
+                      {asset.location?.room || 'Almoxarifado Central'}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-medium text-slate-200">{asset.detentorResponsavel || asset.location.responsiblePerson}</div>
-                      <div className="text-[10px] text-slate-500">Resp. Sala: {asset.location.responsiblePerson}</div>
+                      <div className="font-medium text-slate-200">{asset.detentorResponsavel || asset.location?.responsiblePerson || 'Carlos Alberto Silva'}</div>
+                      <div className="text-[10px] text-slate-500">Resp. Sala: {asset.location?.responsiblePerson || 'Carlos Alberto Silva'}</div>
                     </td>
                     <td className="py-3 px-4 text-slate-500">
                       {asset.lastAuditedDate || 'Nunca'}

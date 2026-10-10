@@ -19,6 +19,7 @@ import {
 import { PatrimonialAsset, RoomChargeMap, RoomChargeMapItem, User, RoomInfo } from '../types';
 import { StorageService } from '../services/storage';
 import { PdfGeneratorService } from '../services/pdfGenerator';
+import { INITIAL_ROOMS } from '../data/initialData';
 
 interface RoomChargeMapViewProps {
   assets: PatrimonialAsset[];
@@ -29,10 +30,13 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
   assets,
   currentUser
 }) => {
-  const [roomsList, setRoomsList] = useState<RoomInfo[]>(() => StorageService.getRoomsList());
+  const [roomsList, setRoomsList] = useState<RoomInfo[]>(() => {
+    const list = StorageService.getRoomsList();
+    return list && list.length > 0 ? list : INITIAL_ROOMS;
+  });
   const [selectedRoomId, setSelectedRoomId] = useState<string>(() => {
     const list = StorageService.getRoomsList();
-    return list.length > 0 ? list[0].id : 'sala-101';
+    return list && list.length > 0 ? list[0].id : (INITIAL_ROOMS[0]?.id || 'sala-101');
   });
   const [checkedItems, setCheckedItems] = useState<{ [assetId: string]: boolean }>({});
   const [hasSigned, setHasSigned] = useState(false);
@@ -44,7 +48,16 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
   const [isEditingResponsible, setIsEditingResponsible] = useState(false);
   const [editedResponsible, setEditedResponsible] = useState('');
 
-  const currentRoom = roomsList.find(r => r.id === selectedRoomId) || roomsList[0];
+  const fallbackRoom: RoomInfo = INITIAL_ROOMS[0] || {
+    id: 'sala-101',
+    name: 'Laboratório de TI 101',
+    building: 'Bloco A - Engenharia',
+    floor: '1º Andar',
+    department: 'Tecnologia da Informação',
+    responsible: 'Mariana Duarte Souza'
+  };
+
+  const currentRoom: RoomInfo = (roomsList && roomsList.find(r => r.id === selectedRoomId)) || (roomsList && roomsList[0]) || fallbackRoom;
 
   // Map Header Customizations
   const organizationName = 'Escola Superior de Sargentos';
@@ -52,7 +65,7 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
   const mapNumber = 'Numero do Mapa Carga ESSgt - 001/14/26';
 
   // Assets in this room
-  const roomAssets = currentRoom ? assets.filter(a => a.location.room === currentRoom.name) : [];
+  const roomAssets = currentRoom ? assets.filter(a => a.location?.room === currentRoom.name) : [];
 
   // Digital Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -60,10 +73,14 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
 
   // Synchronize rooms list from storage on mount
   useEffect(() => {
-    const list = StorageService.getRoomsList();
+    let list = StorageService.getRoomsList();
+    if (!list || list.length === 0) {
+      list = INITIAL_ROOMS;
+      StorageService.saveRoomsList(list);
+    }
     setRoomsList(list);
-    if (list.length > 0 && !list.some(r => r.id === selectedRoomId)) {
-      setSelectedRoomId(list[0].id);
+    if (!list.some(r => r.id === selectedRoomId)) {
+      setSelectedRoomId(list[0]?.id || 'sala-101');
     }
   }, []);
 
@@ -78,7 +95,7 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
   // Handler for saving edited room responsible
   const handleSaveResponsible = () => {
     const trimmed = editedResponsible.trim();
-    if (!trimmed) return;
+    if (!trimmed || !currentRoom) return;
     const updated = StorageService.updateRoomResponsible(currentRoom.id, trimmed, currentUser);
     setRoomsList(updated);
     setIsEditingResponsible(false);
@@ -175,11 +192,11 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
 
     ctx.fillStyle = '#0f172a';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(currentRoom.responsible.toUpperCase(), 16, 50);
+    ctx.fillText((currentRoom?.responsible || '').toUpperCase(), 16, 50);
 
     ctx.fillStyle = '#475569';
     ctx.font = '11px sans-serif';
-    ctx.fillText(`Responsável pela Sala: ${currentRoom.name}`, 16, 70);
+    ctx.fillText(`Responsável pela Sala: ${currentRoom?.responsible || currentRoom?.name || ''}`, 16, 70);
     ctx.fillText(`Data/Hora: ${new Date().toLocaleString('pt-BR')}`, 16, 88);
 
     const hash = 'SHA256-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(16).toUpperCase();
@@ -207,14 +224,14 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
     const finalSig = useCryptoStamp ? generateStampDataUrl() : signatureDataUrl;
 
     return {
-      id: `MAPA-${currentRoom.id.toUpperCase()}-${Date.now().toString().slice(-4)}`,
+      id: `MAPA-${(currentRoom?.id || 'SALA').toUpperCase()}-${Date.now().toString().slice(-4)}`,
       organization: organizationName,
       documentTitle: documentTitle,
       mapNumber: mapNumber,
-      roomName: currentRoom.name,
-      building: currentRoom.building,
-      department: currentRoom.department,
-      responsibleName: currentRoom.responsible,
+      roomName: currentRoom?.name || 'Sala',
+      building: currentRoom?.building || 'Bloco A',
+      department: currentRoom?.department || 'Tecnologia da Informação',
+      responsibleName: currentRoom?.responsible || 'Responsável',
       responsibleRole: 'Custodiante / Responsável de Sala',
       generatedDate: new Date().toLocaleDateString('pt-BR'),
       items,
@@ -236,14 +253,14 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
       action: 'AUDITORIA',
       entity: 'Mapa Carga',
       entityId: mapObj.id,
-      details: `Geração e exportação do Mapa Carga em PDF para a sala ${currentRoom.name} com ${roomAssets.length} itens.`
+      details: `Geração e exportação do Mapa Carga em PDF para a sala ${currentRoom?.name || 'Sala'} com ${roomAssets.length} itens.`
     });
   };
 
   const handleSaveMap = () => {
     const mapObj = buildCurrentMapObject();
     StorageService.saveRoomMap(mapObj);
-    setSuccessMessage(`Mapa Carga de ${currentRoom.name} salvo com sucesso!`);
+    setSuccessMessage(`Mapa Carga de ${currentRoom?.name || 'Sala'} salvo com sucesso!`);
 
     StorageService.addAuditLog({
       userId: currentUser.id,
@@ -252,7 +269,7 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
       action: 'AUDITORIA',
       entity: 'Mapa Carga',
       entityId: mapObj.id,
-      details: `Registro e conferência física formalizada do Mapa Carga da sala ${currentRoom.name}.`
+      details: `Registro e conferência física formalizada do Mapa Carga da sala ${currentRoom?.name || 'Sala'}.`
     });
 
     setTimeout(() => setSuccessMessage(''), 4000);
@@ -338,7 +355,7 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
             </div>
             {/* 4ª linha: "Nome da Sala" */}
             <div className="text-sm font-bold text-emerald-400 pt-0.5">
-              {currentRoom.name}
+              {currentRoom?.name || 'Sala'}
             </div>
           </div>
 
@@ -357,13 +374,13 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 text-xs">
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                 <span className="text-[10px] text-slate-400 font-bold uppercase block">Prédio / Bloco</span>
-                <span className="font-semibold text-slate-800">{currentRoom.building}</span>
-                <span className="block text-[11px] text-slate-500 mt-0.5">{currentRoom.floor}</span>
+                <span className="font-semibold text-slate-800">{currentRoom?.building || 'Bloco A'}</span>
+                <span className="block text-[11px] text-slate-500 mt-0.5">{currentRoom?.floor || '1º Andar'}</span>
               </div>
               
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                 <span className="text-[10px] text-slate-400 font-bold uppercase block">Departamento</span>
-                <span className="font-semibold text-slate-800">{currentRoom.department}</span>
+                <span className="font-semibold text-slate-800">{currentRoom?.department || 'Tecnologia da Informação'}</span>
                 <span className="block text-[11px] text-slate-500 mt-0.5">Unidade Administrativa</span>
               </div>
 
@@ -375,7 +392,7 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setEditedResponsible(currentRoom.responsible);
+                        setEditedResponsible(currentRoom?.responsible || '');
                         setIsEditingResponsible(true);
                       }}
                       className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center space-x-1 cursor-pointer bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded transition-colors"
@@ -423,7 +440,7 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
                 ) : (
                   <div>
                     <span className="font-semibold text-slate-900 block mt-0.5 text-sm">
-                      {currentRoom.responsible}
+                      {currentRoom?.responsible || 'Responsável'}
                     </span>
                     <span className="block text-[11px] text-indigo-600 font-medium mt-0.5">
                       Fiel Depositário / Custodiante
@@ -610,8 +627,8 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
                     <ShieldCheck className="w-4 h-4 text-sky-600" />
                     <span>Carimbo Criptográfico Autorizado</span>
                   </div>
-                  <div className="mt-1 text-slate-700 font-semibold">{currentRoom.responsible.toUpperCase()}</div>
-                  <div className="text-[11px] text-slate-500">Responsável pela Sala: {currentRoom.name}</div>
+                  <div className="mt-1 text-slate-700 font-semibold">{(currentRoom?.responsible || '').toUpperCase()}</div>
+                  <div className="text-[11px] text-slate-500">Responsável pela Sala: {currentRoom?.responsible || 'N/A'}</div>
                   <div className="text-[10px] text-slate-400 font-mono mt-1">
                     HASH: SHA256-VALIDADO-ICP-{Math.random().toString(36).substr(2, 6).toUpperCase()}
                   </div>
@@ -640,7 +657,7 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
               )}
 
               <div className="text-center pt-1 border-t border-slate-200">
-                <div className="font-bold text-xs text-slate-900">{currentRoom.responsible}</div>
+                <div className="font-bold text-xs text-slate-900">{currentRoom?.responsible || 'Responsável da Sala'}</div>
                 <div className="text-[10px] text-slate-500">
                   Assinatura do Responsável da Sala | {new Date().toLocaleDateString('pt-BR')}
                 </div>

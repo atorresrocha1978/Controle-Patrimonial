@@ -48,25 +48,38 @@ export interface MovementHistory {
 
 export interface PatrimonialAsset {
   id: string;
-  code: string; // Ex: PAT-2024-001
-  name: string;
+  // Campos Oficiais do Ativo Patrimonial
+  codUnidade?: string; // Cód Unidade (ex: 'UG-160136' ou 'ESSgt')
+  codMaterial?: string; // Cod Material
+  code: string; // Patrimônio (Nº Patrimônio)
+  serialNumber?: string; // N. Série
+  ne?: string; // NE (Nota de Empenho)
+  nl?: string; // NL (Nota de Lançamento)
+  name: string; // Nome do material
+  especificacoes?: string; // Especificações
+  acquisitionValue: number; // Valor
+  dataInclusao?: string; // Data Inclusão
+  fam?: string; // FAM (Ficha de Acompanhamento de Material)
+  dom?: string; // Dom (Documento de Origem do Material / Diário Oficial)
+  bam?: string; // BAM (Boletim de Alteração de Material)
+  contaPat?: string; // Conta Pat (Conta Patrimonial)
+  detentorResponsavel?: string; // Detentor Responsável
+  status: AssetStatus; // Status
+  category: AssetCategory; // Categoria
+
+  // Campos complementares
   description: string;
-  category: AssetCategory;
-  detentorResponsavel?: string; // Detentor Responsável direto pelo ativo
-  serialNumber?: string;
   brand?: string;
   model?: string;
   location: {
     building: string;
     floor: string;
-    room: string;
+    room: string; // Sala/Local de Alocação
     fullAddress: string;
     responsiblePerson: string;
   };
-  status: AssetStatus;
   condition: AssetCondition;
-  acquisitionDate: string;
-  acquisitionValue: number;
+  acquisitionDate: string; // Data de aquisição / inclusão
   currentBookValue: number;
   annualDepreciationRate: number; // e.g. 10%
   supplier?: string;
