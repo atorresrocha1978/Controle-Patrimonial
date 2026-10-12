@@ -119,78 +119,18 @@ export class StorageService {
           modified = true;
         }
 
-        let detentorResponsavel = asset.detentorResponsavel;
-        if (!detentorResponsavel) {
-          detentorResponsavel = asset.location?.responsiblePerson || 'Carlos Alberto Silva';
-          modified = true;
-        }
-
-        const codeNum = (asset.code || '').replace(/\D/g, '') || '001';
-
-        let codUnidade = asset.codUnidade;
-        if (!codUnidade) {
-          codUnidade = 'ESSgt - 160136';
-          modified = true;
-        }
-
-        let codMaterial = asset.codMaterial;
-        if (!codMaterial) {
-          codMaterial = `MAT-CAT-${codeNum.padStart(4, '0')}`;
-          modified = true;
-        }
-
-        let ne = asset.ne;
-        if (!ne) {
-          ne = `2024NE${codeNum.padStart(6, '0')}`;
-          modified = true;
-        }
-
-        let nl = asset.nl;
-        if (!nl) {
-          nl = `2024NL${codeNum.padStart(6, '0')}`;
-          modified = true;
-        }
-
-        let fam = asset.fam;
-        if (!fam) {
-          fam = `FAM-${codeNum}/2024`;
-          modified = true;
-        }
-
-        let dom = asset.dom;
-        if (!dom) {
-          dom = asset.invoiceNumber ? `DOM-${asset.invoiceNumber.replace(/\D/g, '') || codeNum}` : `DOM-${codeNum}/24`;
-          modified = true;
-        }
-
-        let bam = asset.bam;
-        if (!bam) {
-          bam = `BAM-${codeNum}/2024`;
-          modified = true;
-        }
-
-        let contaPat = asset.contaPat;
-        if (!contaPat) {
-          contaPat = asset.category === 'Informatica' ? '1.2.3.1.1.01.02' :
-            asset.category === 'Mobiliario' ? '1.2.3.1.1.02.01' :
-            asset.category === 'Veiculos' ? '1.2.3.1.1.05.00' :
-            asset.category === 'Audiovisual' ? '1.2.3.1.1.03.04' :
-            asset.category === 'Laboratorio' ? '1.2.3.1.1.04.10' :
-            '1.2.3.1.1.01.00';
-          modified = true;
-        }
-
-        let especificacoes = asset.especificacoes;
-        if (!especificacoes) {
-          especificacoes = asset.description || `${asset.name} - Especificações técnicas homologadas.`;
-          modified = true;
-        }
-
-        let dataInclusao = asset.dataInclusao;
-        if (!dataInclusao) {
-          dataInclusao = asset.acquisitionDate || '2024-01-15';
-          modified = true;
-        }
+        // Preserve explicit empty strings '' for fields left blank to be filled later
+        let detentorResponsavel = asset.detentorResponsavel !== undefined ? asset.detentorResponsavel : (asset.location?.responsiblePerson || '');
+        let codUnidade = asset.codUnidade !== undefined ? asset.codUnidade : '';
+        let codMaterial = asset.codMaterial !== undefined ? asset.codMaterial : '';
+        let ne = asset.ne !== undefined ? asset.ne : '';
+        let nl = asset.nl !== undefined ? asset.nl : '';
+        let fam = asset.fam !== undefined ? asset.fam : '';
+        let dom = asset.dom !== undefined ? asset.dom : '';
+        let bam = asset.bam !== undefined ? asset.bam : '';
+        let contaPat = asset.contaPat !== undefined ? asset.contaPat : '';
+        let especificacoes = asset.especificacoes !== undefined ? asset.especificacoes : (asset.description || '');
+        let dataInclusao = asset.dataInclusao !== undefined ? asset.dataInclusao : (asset.acquisitionDate || '');
 
         return { 
           ...asset, 
@@ -274,12 +214,38 @@ export class StorageService {
       userRole: user.role,
       action: 'EXCLUSAO',
       entity: 'Patrimonio',
-      entityId: target.code,
-      details: `Ativo "${target.name}" (${target.code}) removido do sistema patrimonial.`
+      entityId: target.code || target.id,
+      details: `Ativo "${target.name || 'Sem nome'}" (${target.code || 'Sem Nº'}) removido do sistema patrimonial.`
     });
 
     this.enqueueSync({ action: 'DELETE_ASSET', data: { id: assetId, code: target.code } });
     return true;
+  }
+
+  static deleteAssets(assetIds: string[], user: User): number {
+    const assets = this.getAssets();
+    const idSet = new Set(assetIds);
+    const toDelete = assets.filter(a => idSet.has(a.id));
+    if (toDelete.length === 0) return 0;
+
+    const remaining = assets.filter(a => !idSet.has(a.id));
+    this.saveAssets(remaining);
+
+    this.addAuditLog({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'EXCLUSAO',
+      entity: 'Patrimonio',
+      entityId: `LOTE-${toDelete.length}`,
+      details: `Exclusão em lote de ${toDelete.length} materiais patrimoniais realizada por ${user.name}.`
+    });
+
+    toDelete.forEach(target => {
+      this.enqueueSync({ action: 'DELETE_ASSET', data: { id: target.id, code: target.code } });
+    });
+
+    return toDelete.length;
   }
 
   // --- MAINTENANCES ---

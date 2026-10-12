@@ -247,13 +247,12 @@ export class PdfGeneratorService {
     doc.setFontSize(9);
     doc.setTextColor(203, 213, 225);
     doc.text(`Competência: ${monthYear} | Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth / 2, 17, { align: 'center' });
-    doc.text('Auditoria, Depreciação e Conformidade de Ativos Fixos', pageWidth / 2, 22, { align: 'center' });
+    doc.text('Auditoria, Inventário e Conformidade de Ativos Fixos', pageWidth / 2, 22, { align: 'center' });
 
     // Summary KPI Cards
     const totalAssets = assets.length;
     const totalAcquisition = assets.reduce((acc, a) => acc + a.acquisitionValue, 0);
     const totalBookValue = assets.reduce((acc, a) => acc + a.currentBookValue, 0);
-    const accumulatedDeprec = totalAcquisition - totalBookValue;
     const inDescargaCount = assets.filter(a => a.status === 'descarga').length;
 
     doc.setFillColor(248, 250, 252);

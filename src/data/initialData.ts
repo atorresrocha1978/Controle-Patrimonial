@@ -571,7 +571,7 @@ export const INITIAL_MAINTENANCES: MaintenanceRecord[] = [
     technicianOrCompany: 'Schneider Electric Autorizada',
     estimatedCost: 1950.00,
     frequencyMonths: 12,
-    notes: 'Recomendação técnica baseada na telemetria preditiva do sistema.'
+    notes: 'Recomendação técnica baseada na vistoria preventiva do sistema.'
   },
   {
     id: 'mnt-004',
@@ -673,8 +673,8 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
   },
   {
     id: 'notif-3',
-    title: 'Análise Preditiva: Alerta de Bateria',
-    message: 'Nobreak APC 3000VA (PAT-2024-006) atingiu prazo crítico de substituição de baterias para evitar paradas inesperadas.',
+    title: 'Alerta Preventivo: Bateria de Nobreak',
+    message: 'Nobreak APC 3000VA (PAT-2024-006) atingiu prazo para substituição preventiva de baterias.',
     type: 'danger',
     date: '2026-09-18T09:15:00Z',
     read: true,

@@ -39,9 +39,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = [
     {
       id: 'dashboard' as ActiveTab,
-      label: 'Painel & Preditivo',
+      label: 'Painel de Controle',
       icon: LayoutDashboard,
-      description: 'KPIs e análise preditiva',
+      description: 'KPIs e visão gerencial',
       allowedRoles: ['admin', 'employee', 'auditor', 'detentor_executivo']
     },
     {

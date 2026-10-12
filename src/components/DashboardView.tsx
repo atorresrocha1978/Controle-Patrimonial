@@ -41,8 +41,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalAssets = assets.length;
   const totalAcquisition = assets.reduce((sum, a) => sum + a.acquisitionValue, 0);
   const totalBookValue = assets.reduce((sum, a) => sum + a.currentBookValue, 0);
-  const totalDepreciation = totalAcquisition - totalBookValue;
   const inUseCount = assets.filter(a => a.status === 'em_uso').length;
+  const disponivelCount = assets.filter(a => a.status === 'disponivel').length;
 
   // Category counts
   const categoryCounts: { [cat: string]: number } = {};
@@ -66,44 +66,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     ? Math.round(((conditionCounts.novo + conditionCounts.bom) / assets.length) * 100)
     : 100;
 
-  // PREDICTIVE ANALYSIS ALGORITHM:
-  // Detect assets nearing failure, requiring battery replacement, or warranty expiration
-  const predictiveAlerts = assets.map(a => {
-    let riskLevel: 'alto' | 'medio' | 'baixo' = 'baixo';
-    let predictedAction = '';
-    let projectedCost = 0;
-
-    const acquisitionYear = new Date(a.acquisitionDate).getFullYear();
-    const ageYears = 2026 - acquisitionYear;
-
-    if (a.category === 'Informatica' && ageYears >= 3) {
-      riskLevel = 'alto';
-      predictedAction = 'Fim do ciclo de vida útil (obsolescência tecnológica). Substituição preventiva recomendada.';
-      projectedCost = a.acquisitionValue * 1.1;
-    } else if (a.name.toLowerCase().includes('nobreak') || a.name.toLowerCase().includes('ups')) {
-      riskLevel = 'alto';
-      predictedAction = 'Troca obrigatória do banco de baterias VRLA (vida útil química esgotando em 60 dias).';
-      projectedCost = 1950.00;
-    } else if (a.condition === 'danificado' || a.status === 'descarga') {
-      riskLevel = 'medio';
-      predictedAction = 'Revisão técnica corretiva ou substituição de peças para restauração funcional.';
-      projectedCost = 1200.00;
-    } else if (ageYears >= 2 && !a.lastMaintenanceDate) {
-      riskLevel = 'medio';
-      predictedAction = 'Equipamento sem histórico de manutenção preventiva há mais de 18 meses.';
-      projectedCost = 650.00;
-    }
-
-    return {
-      asset: a,
-      riskLevel,
-      predictedAction,
-      projectedCost
-    };
-  }).filter(item => item.riskLevel !== 'baixo');
-
-  const totalProjectedReplacement = predictiveAlerts.reduce((sum, item) => sum + item.projectedCost, 0);
-
   const handleDownloadMonthlyPdf = () => {
     PdfGeneratorService.generateMonthlyReportPdf(assets, maintenances, selectedMonth);
   };
@@ -115,14 +77,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div>
           <div className="flex items-center space-x-2">
             <span className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-              <Sparkles className="w-5 h-5" />
+              <Package className="w-5 h-5" />
             </span>
             <h1 className="text-xl font-bold text-white tracking-tight">
-              Painel de Controle & Análise Preditiva
+              Painel de Controle e Gestão Patrimonial
             </h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Visão gerencial em tempo real, saúde patrimonial e inteligência preventiva de ativos
+            Visão gerencial em tempo real, controle de inventário e distribuição de ativos patrimoniais
           </p>
         </div>
 
@@ -166,12 +128,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Book Value */}
         <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex items-center justify-between shadow-sm">
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Valor Contábil Atual</span>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Valor Total do Patrimônio</span>
             <div className="text-xl font-black text-emerald-400 mt-1">
-              R$ {totalBookValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {totalAcquisition.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <span className="text-[11px] text-slate-400 mt-1 block">
-              Orig.: R$ {totalAcquisition.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              Ativos tombados e inventariados
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-emerald-950/60 text-emerald-400 flex items-center justify-center border border-emerald-800/60">
@@ -193,81 +155,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Depreciação Acumulada */}
+        {/* Ativos Disponíveis / Reserva */}
         <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex items-center justify-between shadow-sm">
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Depreciação Acumulada</span>
-            <div className="text-xl font-black text-slate-300 mt-1">
-              R$ {totalDepreciation.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-            <span className="text-[11px] text-indigo-400 mt-1 block">
-              Reconciliado com ERP
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Disponíveis / Reserva</span>
+            <div className="text-2xl font-black text-amber-400 mt-1">{disponivelCount}</div>
+            <span className="text-[11px] text-slate-400 mt-1 block">
+              Prontos para alocação
             </span>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center border border-slate-700">
-            <TrendingUp className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-xl bg-amber-950/60 text-amber-400 flex items-center justify-center border border-amber-800/60">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
-        </div>
-      </div>
-
-      {/* --- PREDICTIVE ANALYSIS SECTION --- */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/30 rounded-2xl border border-indigo-500/30 p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-sm text-white flex items-center space-x-2">
-                <span>Análise Preditiva de Falhas e Custos de Reposição</span>
-                <span className="text-[10px] bg-indigo-900/80 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-700 font-normal">
-                  Algoritmo de Telemetria
-                </span>
-              </h2>
-              <p className="text-xs text-slate-400">
-                Detecção antecipada de desgaste, baterias críticas e projeção de orçamento anual
-              </p>
-            </div>
-          </div>
-
-          <div className="text-right">
-            <span className="text-[10px] text-slate-400 uppercase block">Projeção de Reposição</span>
-            <span className="font-black text-sm text-indigo-300 font-mono">
-              R$ {totalProjectedReplacement.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-
-        {/* Predictive Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {predictiveAlerts.slice(0, 3).map((item, idx) => (
-            <div
-              key={idx}
-              className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-indigo-500/40 transition-colors"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-mono text-xs font-bold text-indigo-400">{item.asset.code}</span>
-                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                    item.riskLevel === 'alto' 
-                      ? 'bg-rose-950 text-rose-300 border border-rose-800' 
-                      : 'bg-amber-950 text-amber-300 border border-amber-800'
-                  }`}>
-                    Risco {item.riskLevel}
-                  </span>
-                </div>
-                <h4 className="font-bold text-xs text-white line-clamp-1">{item.asset.name}</h4>
-                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{item.predictedAction}</p>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                <span className="text-slate-500 text-[10px]">Custo Est.:</span>
-                <span className="font-semibold text-emerald-400 font-mono">
-                  R$ {item.projectedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 

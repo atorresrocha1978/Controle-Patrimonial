@@ -30,7 +30,7 @@ export const ErpIntegrationView: React.FC<ErpIntegrationViewProps> = ({
   const [syncLogs, setSyncLogs] = useState<Array<{ time: string; text: string; type: 'info' | 'success' | 'warning' }>>([
     { time: '08:00:12', text: 'Conexão segura estabelecida com o gateway ERP (mTLS 1.3).', type: 'info' },
     { time: '08:00:15', text: 'Pacote de 10 ativos imobilizados conferido com o plano de contas contábil.', type: 'success' },
-    { time: '08:00:18', text: 'Depreciações acumuladas sincronizadas com sucesso sem divergências.', type: 'success' }
+    { time: '08:00:18', text: 'Registros e inventário sincronizados com sucesso sem divergências.', type: 'success' }
   ]);
 
   const handleManualSync = async () => {
@@ -90,7 +90,7 @@ export const ErpIntegrationView: React.FC<ErpIntegrationViewProps> = ({
             </h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Conexão bidirecional para sincronização de ativos imobilizados, custos e depreciação contábil
+            Conexão bidirecional para sincronização de ativos imobilizados, inventário e controle patrimonial
           </p>
         </div>
 

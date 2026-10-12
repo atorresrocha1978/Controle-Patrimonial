@@ -29,6 +29,8 @@ export interface ParsedAssetRow {
   notes?: string;
   valid: boolean;
   error?: string;
+  hasBlankFields?: boolean;
+  blankFields?: string[];
 }
 
 export class ExcelService {
@@ -173,35 +175,45 @@ export class ExcelService {
           const worksheet = workbook.Sheets[firstSheetName];
           const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-          const results: ParsedAssetRow[] = rawRows.map((row, index) => {
-            // Flexible field matching
-            const code = String(row['Numero_Patrimonio'] || row['Patrimonio'] || row['Código'] || row['Codigo'] || row['TAG'] || '').trim();
+          // Ignore rows where all values are completely empty
+          const nonEmptyRawRows = rawRows.filter(row => {
+            return Object.values(row).some(v => v !== null && v !== undefined && String(v).trim() !== '');
+          });
+
+          const results: ParsedAssetRow[] = nonEmptyRawRows.map((row) => {
+            // Flexible field matching - keeping blank values if the cell is in blank
+            const code = String(row['Numero_Patrimonio'] || row['Patrimonio'] || row['Código'] || row['Codigo'] || row['TAG'] || row['Numero_Tombamento'] || '').trim();
             const name = String(row['Nome_Material'] || row['Nome'] || row['Descricao_Item'] || row['Descricao'] || row['Item'] || '').trim();
-            const codUnidade = String(row['Cod_Unidade'] || row['CodUnidade'] || row['Codigo_Unidade'] || row['Unidade'] || row['UG'] || 'ESSgt - 160136').trim();
+            const codUnidade = String(row['Cod_Unidade'] || row['CodUnidade'] || row['Codigo_Unidade'] || row['Unidade'] || row['UG'] || '').trim();
             const codMaterial = String(row['Cod_Material'] || row['CodMaterial'] || row['Codigo_Material'] || '').trim();
-            const category = String(row['Categoria'] || 'Informatica').trim();
-            const room = String(row['Local_Sala'] || row['Sala'] || row['Local'] || 'Almoxarifado Central').trim();
-            const building = String(row['Edificio'] || row['Prédio'] || row['Bloco'] || 'Bloco A - Engenharia').trim();
-            const floor = String(row['Andar'] || 'Térreo').trim();
-            const responsible = String(row['Responsavel_Sala'] || row['Responsavel'] || 'Carlos Alberto Silva').trim();
-            const detentorResponsavel = String(row['Detentor_Responsavel'] || row['Detentor Responsavel'] || row['Detentor'] || responsible || 'Carlos Alberto Silva').trim();
+            const category = String(row['Categoria'] || '').trim();
+            const room = String(row['Local_Sala'] || row['Sala'] || row['Local'] || '').trim();
+            const building = String(row['Edificio'] || row['Prédio'] || row['Bloco'] || '').trim();
+            const floor = String(row['Andar'] || '').trim();
+            const responsible = String(row['Responsavel_Sala'] || row['Responsavel'] || '').trim();
+            const detentorResponsavel = String(row['Detentor_Responsavel'] || row['Detentor Responsavel'] || row['Detentor'] || '').trim();
             const ne = String(row['NE'] || row['Nota_Empenho'] || '').trim();
             const nl = String(row['NL'] || row['Nota_Lancamento'] || '').trim();
             const fam = String(row['FAM'] || row['Ficha_Acompanhamento'] || '').trim();
             const dom = String(row['Dom'] || row['DOM'] || row['Doc_Origem'] || '').trim();
             const bam = String(row['BAM'] || row['Boletim_Alteracao'] || '').trim();
-            const contaPat = String(row['Conta_Pat'] || row['ContaPat'] || row['Conta_Patrimonial'] || '1.2.3.1.1.01.00').trim();
+            const contaPat = String(row['Conta_Pat'] || row['ContaPat'] || row['Conta_Patrimonial'] || '').trim();
             const especificacoes = String(row['Especificacoes'] || row['Especificações'] || row['Descricao_Detalhada'] || '').trim();
             const brand = String(row['Marca'] || '').trim();
             const model = String(row['Modelo'] || '').trim();
             const serialNumber = String(row['Numero_Serie'] || row['Serie'] || '').trim();
             
-            let value = Number(row['Valor'] || row['Valor_Aquisicao'] || row['Preço'] || 0);
-            if (isNaN(value)) value = 0;
+            const rawVal = row['Valor'] !== undefined && row['Valor'] !== '' ? row['Valor'] : (row['Valor_Aquisicao'] !== undefined && row['Valor_Aquisicao'] !== '' ? row['Valor_Aquisicao'] : row['Preço']);
+            let value = 0;
+            if (rawVal !== undefined && rawVal !== '') {
+              const cleanStr = String(rawVal).replace('R$', '').replace(/\./g, '').replace(',', '.').trim();
+              const parsedVal = Number(cleanStr);
+              value = isNaN(parsedVal) ? (Number(rawVal) || 0) : parsedVal;
+            }
 
-            let date = String(row['Data_Inclusao'] || row['Data_Aquisicao'] || row['Data'] || new Date().toISOString().split('T')[0]).trim();
+            let date = String(row['Data_Inclusao'] || row['Data_Aquisicao'] || row['Data'] || '').trim();
             // Handle excel numeric dates if any
-            if (!isNaN(Number(date)) && Number(date) > 20000) {
+            if (date && !isNaN(Number(date)) && Number(date) > 20000) {
               const jsDate = new Date((Number(date) - (25567 + 2)) * 86400 * 1000);
               date = jsDate.toISOString().split('T')[0];
             }
@@ -209,23 +221,32 @@ export class ExcelService {
             const condition = String(row['Estado_Conservacao'] || row['Estado'] || 'bom').toLowerCase().trim();
             const notes = String(row['Observacoes'] || row['Notas'] || '').trim();
 
-            let valid = true;
-            let error = '';
+            // Detect blank cells for user visibility and later completion
+            const blankFields: string[] = [];
+            if (!code) blankFields.push('Patrimônio');
+            if (!name) blankFields.push('Nome do Material');
+            if (!codUnidade) blankFields.push('Cod Unidade');
+            if (!codMaterial) blankFields.push('Cod Material');
+            if (!serialNumber) blankFields.push('N. Série');
+            if (!ne) blankFields.push('NE');
+            if (!nl) blankFields.push('NL');
+            if (!fam) blankFields.push('FAM');
+            if (!dom) blankFields.push('Dom');
+            if (!bam) blankFields.push('BAM');
+            if (!contaPat) blankFields.push('Conta Pat');
+            if (!room) blankFields.push('Sala/Local de Alocação');
+            if (!detentorResponsavel) blankFields.push('Detentor Responsável');
 
-            if (!code) {
-              valid = false;
-              error = 'Número de patrimônio obrigatório.';
-            } else if (!name) {
-              valid = false;
-              error = 'Nome do material obrigatório.';
-            }
+            // All rows are accepted, even with blank cells, allowing posterior completion
+            const valid = true;
+            const error = '';
 
             return {
-              code: code || `PAT-AUTO-${index + 1}`,
-              name: name || 'Item Sem Descrição',
-              codUnidade: codUnidade || 'ESSgt - 160136',
-              codMaterial: codMaterial || `MAT-${(code || '').replace(/\D/g, '').padStart(4, '0') || '001'}`,
-              category,
+              code,
+              name,
+              codUnidade,
+              codMaterial,
+              category: category || 'Informatica',
               room,
               building,
               floor,
@@ -247,7 +268,9 @@ export class ExcelService {
               condition: ['novo', 'bom', 'danificado'].includes(condition) ? condition : 'bom',
               notes,
               valid,
-              error
+              error,
+              hasBlankFields: blankFields.length > 0,
+              blankFields
             };
           });
 
@@ -264,9 +287,12 @@ export class ExcelService {
 
   /**
    * Converts validated rows into full PatrimonialAsset objects and saves them.
+   * Blank cells are preserved as empty strings so they can be filled in later.
    */
   static convertToAssets(rows: ParsedAssetRow[], currentUser: User): PatrimonialAsset[] {
     const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
     return rows.map((r, i) => {
       const validCategories: AssetCategory[] = [
         'Informatica',
@@ -277,64 +303,64 @@ export class ExcelService {
         'Laboratorio',
         'Ferramentas'
       ];
-      const matchedCategory = validCategories.find(
-        c => c.toLowerCase() === r.category.toLowerCase()
-      ) || 'Informatica';
+      const matchedCategory = r.category
+        ? validCategories.find(c => c.toLowerCase() === r.category.toLowerCase()) || 'Informatica'
+        : 'Informatica';
 
       const validConditions: AssetCondition[] = ['novo', 'bom', 'danificado'];
-      const matchedCondition = validConditions.find(
-        c => c.toLowerCase() === r.condition.toLowerCase()
-      ) || 'bom';
+      const matchedCondition = r.condition
+        ? validConditions.find(c => c.toLowerCase() === r.condition.toLowerCase()) || 'bom'
+        : 'bom';
 
-      const dateStr = r.dataInclusao || r.acquisitionDate || now.split('T')[0];
+      const dateStr = r.dataInclusao || r.acquisitionDate || '';
 
       return {
         id: `ast-imp-${Date.now()}-${i}`,
-        codUnidade: r.codUnidade || 'ESSgt - 160136',
-        codMaterial: r.codMaterial || `MAT-${r.code.replace(/\D/g, '').padStart(4, '0') || '001'}`,
-        code: r.code,
-        serialNumber: r.serialNumber,
+        codUnidade: r.codUnidade || '',
+        codMaterial: r.codMaterial || '',
+        code: r.code ? r.code.toUpperCase().trim() : '',
+        serialNumber: r.serialNumber || '',
         ne: r.ne || '',
         nl: r.nl || '',
-        name: r.name,
-        especificacoes: r.especificacoes || `${r.name} - Cadastrado via importação em lote.`,
-        acquisitionValue: r.acquisitionValue || 1000,
+        name: r.name || '',
+        especificacoes: r.especificacoes || '',
+        acquisitionValue: Number(r.acquisitionValue) || 0,
         dataInclusao: dateStr,
         acquisitionDate: dateStr,
         fam: r.fam || '',
         dom: r.dom || '',
         bam: r.bam || '',
-        contaPat: r.contaPat || '1.2.3.1.1.01.00',
-        detentorResponsavel: r.detentorResponsavel || r.responsiblePerson || currentUser.name,
+        contaPat: r.contaPat || '',
+        detentorResponsavel: r.detentorResponsavel || '',
         status: 'em_uso',
         category: matchedCategory,
-        description: r.especificacoes || `${r.name} - Cadastrado via importação em lote.`,
-        brand: r.brand,
-        model: r.model,
+        description: r.especificacoes || r.name || '',
+        brand: r.brand || '',
+        model: r.model || '',
         location: {
-          building: r.building || 'Bloco A - Engenharia',
-          floor: r.floor || '1º Andar',
-          room: r.room || 'Almoxarifado Central',
-          fullAddress: `${r.building || 'Bloco A'}, ${r.floor || '1º Andar'}, ${r.room || 'Almoxarifado Central'}`,
-          responsiblePerson: r.responsiblePerson || currentUser.name
+          building: r.building || '',
+          floor: r.floor || '',
+          room: r.room || '',
+          fullAddress: [r.building, r.floor, r.room].filter(Boolean).join(', '),
+          responsiblePerson: r.responsiblePerson || ''
         },
         condition: matchedCondition,
-        currentBookValue: r.acquisitionValue ? r.acquisitionValue * 0.9 : 900,
+        currentBookValue: r.acquisitionValue ? r.acquisitionValue * 0.9 : 0,
         annualDepreciationRate: 15,
         attachments: [],
         movementHistory: [
           {
-            id: `mov-imp-${i}`,
-            date: dateStr,
+            id: `mov-imp-${Date.now()}-${i}`,
+            date: dateStr || today,
             fromLocation: 'Importação em Lote',
-            toLocation: r.room || 'Almoxarifado Central',
+            toLocation: r.room || 'A definir',
             responsibleUser: currentUser.name,
-            reason: 'Cadastro massivo via planilha Excel'
+            reason: 'Importação em lote (células em branco aceitas para preenchimento posterior)'
           }
         ],
-        notes: r.notes || 'Importado automaticamente via planilha.',
+        notes: r.notes || '',
         syncedWithErp: false,
-        lastAuditedDate: now.split('T')[0]
+        lastAuditedDate: today
       };
     });
   }

@@ -580,8 +580,8 @@ export const RoomChargeMapView: React.FC<RoomChargeMapViewProps> = ({
               </p>
               <div className="space-y-1 text-xs pt-1">
                 <div><strong>Data da Conferência:</strong> {new Date().toLocaleDateString('pt-BR')}</div>
-                <div><strong>Responsável pela Sala:</strong> {currentRoom.responsible}</div>
-                <div><strong>Departamento / Setor:</strong> {currentRoom.department}</div>
+                <div><strong>Responsável pela Sala:</strong> {currentRoom?.responsible || 'N/A'}</div>
+                <div><strong>Departamento / Setor:</strong> {currentRoom?.department || 'N/A'}</div>
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Package, 
   Search, 
@@ -21,7 +21,10 @@ import {
   X, 
   Check,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  CheckSquare,
+  Square,
+  RotateCcw
 } from 'lucide-react';
 import { 
   PatrimonialAsset, 
@@ -50,9 +53,13 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   selectedAssetIdFromUrl
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchPatrimonio, setSearchPatrimonio] = useState('');
+  const [searchNomeMaterial, setSearchNomeMaterial] = useState('');
+  const [filterContaPat, setFilterContaPat] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [roomFilter, setRoomFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [pendingFilter, setPendingFilter] = useState<string>('all');
 
   // Modals state
   const [activeAssetModal, setActiveAssetModal] = useState<PatrimonialAsset | null>(null);
@@ -61,6 +68,10 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   const [qrCodeModalAsset, setQrCodeModalAsset] = useState<PatrimonialAsset | null>(null);
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string>('');
   const [assetToDelete, setAssetToDelete] = useState<PatrimonialAsset | null>(null);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+
+  // Batch selection state
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
 
   // Feedback notifications
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -137,8 +148,43 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
     }
   }, [qrCodeModalAsset]);
 
-  // Filtered Assets across all official fields
+  // Unique Conta Pat list for dropdown filtering
+  const uniqueContaPatList = useMemo(() => {
+    const set = new Set<string>();
+    assets.forEach(a => {
+      if (a.contaPat && a.contaPat.trim()) {
+        set.add(a.contaPat.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [assets]);
+
+  // Filtered Assets across all official fields and dedicated filters
   const filteredAssets = assets.filter((asset) => {
+    // Dedicated filter: Patrimônio (Nº Tombamento / Code)
+    if (searchPatrimonio.trim()) {
+      const termPat = searchPatrimonio.trim().toLowerCase();
+      if (!asset.code || !asset.code.toLowerCase().includes(termPat)) {
+        return false;
+      }
+    }
+
+    // Dedicated filter: Nome do Material
+    if (searchNomeMaterial.trim()) {
+      const termNome = searchNomeMaterial.trim().toLowerCase();
+      if (!asset.name || !asset.name.toLowerCase().includes(termNome)) {
+        return false;
+      }
+    }
+
+    // Dedicated filter: Conta Pat
+    if (filterContaPat !== 'all' && filterContaPat.trim()) {
+      const termConta = filterContaPat.trim().toLowerCase();
+      if (!asset.contaPat || !asset.contaPat.toLowerCase().includes(termConta)) {
+        return false;
+      }
+    }
+
     const term = searchTerm.toLowerCase().trim();
     const matchesSearch =
       !term ||
@@ -159,13 +205,62 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
       (asset.brand && asset.brand.toLowerCase().includes(term));
 
     const matchesCategory = categoryFilter === 'all' || asset.category === categoryFilter;
-    const matchesRoom = roomFilter === 'all' || asset.location.room === roomFilter;
+    const matchesRoom = roomFilter === 'all' || asset.location?.room === roomFilter;
     const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
 
-    return matchesSearch && matchesCategory && matchesRoom && matchesStatus;
+    const hasBlankFields = !asset.code || !asset.name || !asset.detentorResponsavel || !asset.location?.room;
+    const matchesPending =
+      pendingFilter === 'all' ||
+      (pendingFilter === 'pending' && hasBlankFields) ||
+      (pendingFilter === 'complete' && !hasBlankFields);
+
+    return matchesSearch && matchesCategory && matchesRoom && matchesStatus && matchesPending;
   });
 
-  // Handle Confirm Delete Asset
+  // Toggle selection for a single asset
+  const toggleSelectAsset = (assetId: string) => {
+    setSelectedAssetIds(prev =>
+      prev.includes(assetId)
+        ? prev.filter(id => id !== assetId)
+        : [...prev, assetId]
+    );
+  };
+
+  // Check if all filtered assets are currently selected
+  const allFilteredSelected = filteredAssets.length > 0 && filteredAssets.every(a => selectedAssetIds.includes(a.id));
+
+  // Handle Select All / Unselect All
+  const handleToggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const filteredIdSet = new Set(filteredAssets.map(a => a.id));
+      setSelectedAssetIds(prev => prev.filter(id => !filteredIdSet.has(id)));
+    } else {
+      const newIds = new Set([...selectedAssetIds, ...filteredAssets.map(a => a.id)]);
+      setSelectedAssetIds(Array.from(newIds));
+    }
+  };
+
+  // Handle Confirm Bulk Delete (Popup: Tem certeza que deseja apagar?)
+  const handleConfirmBulkDelete = () => {
+    if (selectedAssetIds.length === 0) return;
+    const count = StorageService.deleteAssets(selectedAssetIds, currentUser);
+    if (count > 0) {
+      if (activeAssetModal && selectedAssetIds.includes(activeAssetModal.id)) {
+        setActiveAssetModal(null);
+      }
+      if (formAsset.id && selectedAssetIds.includes(formAsset.id)) {
+        setIsEditModalOpen(false);
+      }
+      setSelectedAssetIds([]);
+      setIsBulkDeleteModalOpen(false);
+      onRefreshAssets();
+      showNotification(`${count} materiais apagados com sucesso!`, 'success');
+    } else {
+      showNotification('Nenhum material foi apagado.', 'error');
+    }
+  };
+
+  // Handle Confirm Delete Single Asset
   const handleConfirmDeleteAsset = () => {
     if (!assetToDelete) return;
     const target = assetToDelete;
@@ -179,58 +274,56 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
       }
       setAssetToDelete(null);
       onRefreshAssets();
-      showNotification(`Material "${target.name}" (${target.code}) foi excluído com sucesso!`, 'success');
+      showNotification(`Material "${target.name || 'Sem nome'}" (${target.code || 'Sem nº'}) foi excluído com sucesso!`, 'success');
     } else {
-      showNotification(`Falha ao excluir o material "${target.name}". Item não localizado.`, 'error');
+      showNotification(`Falha ao excluir o material "${target.name || 'item'}". Item não localizado.`, 'error');
     }
   };
 
-  // Handle Save New or Edit Asset
+  // Handle Save New or Edit Asset (aceita salvar campos em branco para preenchimento posterior)
   const handleSaveAssetForm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formAsset.code || !formAsset.name) {
-      showNotification('Nº de Patrimônio e Nome do material são obrigatórios para salvar.', 'error');
-      return;
-    }
 
     const selectedRoomObj = roomsList.find(r => r.name === formAsset.location?.room) || roomsList[0];
 
     const isNew = !formAsset.id;
     const dateNowStr = new Date().toISOString().split('T')[0];
-    const dataInclusaoFinal = formAsset.dataInclusao || formAsset.acquisitionDate || dateNowStr;
+    const dataInclusaoFinal = formAsset.dataInclusao || formAsset.acquisitionDate || '';
+    const finalCode = (formAsset.code || '').toUpperCase().trim();
+    const finalName = (formAsset.name || '').trim();
 
     const assetToSave: PatrimonialAsset = {
       id: formAsset.id || `ast-${Date.now()}`,
       // Campos Oficiais de Ativo Patrimonial
-      codUnidade: formAsset.codUnidade?.trim() || 'ESSgt - 160136',
-      codMaterial: formAsset.codMaterial?.trim() || `MAT-${formAsset.code?.replace(/\D/g, '') || Date.now()}`,
-      code: formAsset.code.toUpperCase().trim(),
-      serialNumber: formAsset.serialNumber?.trim() || '',
-      ne: formAsset.ne?.trim() || '',
-      nl: formAsset.nl?.trim() || '',
-      name: formAsset.name.trim(),
-      especificacoes: formAsset.especificacoes?.trim() || formAsset.description?.trim() || '',
+      codUnidade: formAsset.codUnidade !== undefined ? formAsset.codUnidade.trim() : '',
+      codMaterial: formAsset.codMaterial !== undefined ? formAsset.codMaterial.trim() : '',
+      code: finalCode,
+      serialNumber: formAsset.serialNumber !== undefined ? formAsset.serialNumber.trim() : '',
+      ne: formAsset.ne !== undefined ? formAsset.ne.trim() : '',
+      nl: formAsset.nl !== undefined ? formAsset.nl.trim() : '',
+      name: finalName,
+      especificacoes: formAsset.especificacoes !== undefined ? formAsset.especificacoes.trim() : (formAsset.description?.trim() || ''),
       acquisitionValue: Number(formAsset.acquisitionValue) || 0,
       dataInclusao: dataInclusaoFinal,
       acquisitionDate: dataInclusaoFinal,
-      fam: formAsset.fam?.trim() || '',
-      dom: formAsset.dom?.trim() || '',
-      bam: formAsset.bam?.trim() || '',
-      contaPat: formAsset.contaPat?.trim() || '1.2.3.1.1.01.00',
-      detentorResponsavel: formAsset.detentorResponsavel?.trim() || selectedRoomObj.responsible || currentUser.name,
+      fam: formAsset.fam !== undefined ? formAsset.fam.trim() : '',
+      dom: formAsset.dom !== undefined ? formAsset.dom.trim() : '',
+      bam: formAsset.bam !== undefined ? formAsset.bam.trim() : '',
+      contaPat: formAsset.contaPat !== undefined ? formAsset.contaPat.trim() : '',
+      detentorResponsavel: formAsset.detentorResponsavel !== undefined ? formAsset.detentorResponsavel.trim() : '',
       status: (formAsset.status as AssetStatus) || 'em_uso',
       category: (formAsset.category as AssetCategory) || 'Informatica',
 
       // Complementares
-      description: formAsset.especificacoes?.trim() || formAsset.description || formAsset.name,
+      description: formAsset.especificacoes?.trim() || formAsset.description || finalName || 'Material cadastrado no sistema',
       brand: formAsset.brand || '',
       model: formAsset.model || '',
       location: {
-        building: selectedRoomObj.building,
-        floor: selectedRoomObj.floor,
-        room: selectedRoomObj.name,
-        fullAddress: `${selectedRoomObj.building}, ${selectedRoomObj.floor}, ${selectedRoomObj.name}`,
-        responsiblePerson: selectedRoomObj.responsible
+        building: selectedRoomObj?.building || '',
+        floor: selectedRoomObj?.floor || '',
+        room: formAsset.location?.room || selectedRoomObj?.name || '',
+        fullAddress: `${selectedRoomObj?.building || ''}, ${selectedRoomObj?.floor || ''}, ${formAsset.location?.room || selectedRoomObj?.name || ''}`,
+        responsiblePerson: formAsset.detentorResponsavel || selectedRoomObj?.responsible || ''
       },
       condition: (formAsset.condition as AssetCondition) || 'bom',
       currentBookValue: Number(formAsset.acquisitionValue) * 0.85,
@@ -241,7 +334,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           id: `mov-${Date.now()}`,
           date: dateNowStr,
           fromLocation: 'Cadastro Inicial',
-          toLocation: selectedRoomObj.name,
+          toLocation: formAsset.location?.room || selectedRoomObj?.name || 'Inventário',
           responsibleUser: currentUser.name,
           reason: 'Entrada patrimonial no inventário'
         }
@@ -254,7 +347,13 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
     onRefreshAssets();
     setIsEditModalOpen(false);
     setActiveAssetModal(assetToSave);
-    showNotification(isNew ? `Material "${assetToSave.name}" (${assetToSave.code}) cadastrado com sucesso!` : `Material "${assetToSave.name}" atualizado com sucesso!`);
+
+    const hasBlankPending = !finalCode || !finalName || !assetToSave.detentorResponsavel;
+    if (hasBlankPending) {
+      showNotification(`Material salvo com sucesso! Campos em branco mantidos para preenchimento posterior.`, 'success');
+    } else {
+      showNotification(isNew ? `Material "${assetToSave.name}" (${assetToSave.code}) cadastrado com sucesso!` : `Material "${assetToSave.name}" atualizado com sucesso!`);
+    }
   };
 
   // Handle Transfer Asset
@@ -751,26 +850,92 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row items-stretch md:items-center gap-3">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar por Cód Unidade, Patrimônio, Cód Material, N. Série, NE, NL, Nome, FAM, Conta Pat ou Detentor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          />
+      {/* Filter and Search Panel */}
+      <div className="bg-slate-900/90 p-4 rounded-xl border border-slate-800 space-y-3">
+        {/* Row 1: Dedicated Search Filters (Patrimônio, Nome do Material, Conta Pat) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* 1. Pesquisa por Patrimônio */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-indigo-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Pesquisar por Patrimônio..."
+              value={searchPatrimonio}
+              onChange={(e) => setSearchPatrimonio(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+            />
+            {searchPatrimonio && (
+              <button
+                onClick={() => setSearchPatrimonio('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* 2. Pesquisa por Nome do Material */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-indigo-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Pesquisar por Nome do Material..."
+              value={searchNomeMaterial}
+              onChange={(e) => setSearchNomeMaterial(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+            {searchNomeMaterial && (
+              <button
+                onClick={() => setSearchNomeMaterial('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* 3. Filtro por Conta Pat */}
+          <div className="relative">
+            <select
+              value={filterContaPat}
+              onChange={(e) => setFilterContaPat(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+            >
+              <option value="all">Todas as Contas Pat</option>
+              {uniqueContaPatList.map((cp) => (
+                <option key={cp} value={cp}>Conta Pat: {cp}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Category Filter */}
-        <div className="flex items-center space-x-2">
+        {/* Row 2: Secondary Filters & Clear Button */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
+          {/* General Search Input */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Busca geral (Nº Série, NE, NL, Local, Detentor...)"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter */}
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="all">Todas Categorias</option>
             <option value="Informatica">Informática</option>
@@ -785,7 +950,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           <select
             value={roomFilter}
             onChange={(e) => setRoomFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[160px]"
+            className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[150px]"
           >
             <option value="all">Todas as Salas</option>
             {roomsList.map(r => (
@@ -797,14 +962,127 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="all">Todos Status</option>
             <option value="em_uso">Em Uso</option>
             <option value="disponivel">Disponível</option>
             <option value="descarga">Descarga</option>
           </select>
+
+          {/* Pending / Incomplete Filter */}
+          <select
+            value={pendingFilter}
+            onChange={(e) => setPendingFilter(e.target.value)}
+            className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="all">Todos Cadastros</option>
+            <option value="pending">Com campos em branco</option>
+            <option value="complete">Cadastro completo</option>
+          </select>
+
+          {/* Reset Filters button */}
+          {(searchPatrimonio || searchNomeMaterial || filterContaPat !== 'all' || searchTerm || categoryFilter !== 'all' || roomFilter !== 'all' || statusFilter !== 'all' || pendingFilter !== 'all') && (
+            <button
+              onClick={() => {
+                setSearchPatrimonio('');
+                setSearchNomeMaterial('');
+                setFilterContaPat('all');
+                setSearchTerm('');
+                setCategoryFilter('all');
+                setRoomFilter('all');
+                setStatusFilter('all');
+                setPendingFilter('all');
+              }}
+              className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-colors cursor-pointer"
+              title="Limpar todos os filtros"
+            >
+              <RotateCcw className="w-3 h-3 text-slate-400" />
+              <span>Limpar</span>
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* --- SELECTION & BATCH ACTION TOOLBAR --- */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Botão Selecionar Todos */}
+          <button
+            type="button"
+            onClick={handleToggleSelectAll}
+            id="assets-select-all-btn"
+            className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              allFilteredSelected
+                ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/60 hover:bg-indigo-600/30'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+            title={allFilteredSelected ? 'Desmarcar todos os itens' : 'Selecionar todos os materiais listados'}
+          >
+            {allFilteredSelected ? (
+              <CheckSquare className="w-4 h-4 text-indigo-400" />
+            ) : (
+              <Square className="w-4 h-4 text-slate-400" />
+            )}
+            <span>
+              {allFilteredSelected
+                ? `Desmarcar Todos (${selectedAssetIds.length})`
+                : `Selecionar Todos (${filteredAssets.length})`}
+            </span>
+          </button>
+
+          {/* Quick Stats / Feedback */}
+          <div className="text-xs text-slate-400 flex items-center space-x-2">
+            <span>Listando <strong>{filteredAssets.length}</strong> {filteredAssets.length === 1 ? 'material' : 'materiais'}</span>
+            {selectedAssetIds.length > 0 && (
+              <span className="text-indigo-400 font-semibold bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 rounded-md">
+                {selectedAssetIds.length} selecionado(s)
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Botão Apagar e Limpar Seleção */}
+        {canDelete && (
+          <div className="flex items-center space-x-2">
+            {selectedAssetIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedAssetIds([])}
+                className="text-xs text-slate-400 hover:text-slate-200 px-2.5 py-1.5 transition-colors cursor-pointer"
+              >
+                Limpar seleção
+              </button>
+            )}
+
+            {/* Botão Apagar que abre o Popup Tem certeza que deseja apagar? */}
+            <button
+              type="button"
+              id="assets-bulk-delete-btn"
+              onClick={() => {
+                if (selectedAssetIds.length === 0) {
+                  showNotification('Selecione ao menos um material para apagar.', 'error');
+                  return;
+                }
+                setIsBulkDeleteModalOpen(true);
+              }}
+              disabled={selectedAssetIds.length === 0}
+              className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                selectedAssetIds.length > 0
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50 cursor-pointer active:scale-95'
+                  : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed opacity-50'
+              }`}
+              title={
+                selectedAssetIds.length > 0
+                  ? `Apagar ${selectedAssetIds.length} materiais selecionados`
+                  : 'Selecione materiais para habilitar o botão Apagar'
+              }
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Apagar {selectedAssetIds.length > 0 ? `(${selectedAssetIds.length})` : ''}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Assets Grid / Cards */}
@@ -819,15 +1097,42 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           filteredAssets.map((asset) => (
             <div
               key={asset.id}
-              className="bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-2xl p-5 flex flex-col justify-between transition-all group shadow-sm hover:shadow-lg hover:shadow-indigo-950/20"
+              className={`bg-slate-900 border rounded-2xl p-5 flex flex-col justify-between transition-all group shadow-sm hover:shadow-lg ${
+                selectedAssetIds.includes(asset.id)
+                  ? 'border-indigo-500/80 ring-1 ring-indigo-500/50 bg-slate-900/95 shadow-indigo-950/30'
+                  : 'border-slate-800 hover:border-indigo-500/50 hover:shadow-indigo-950/20'
+              }`}
             >
               <div>
-                {/* Card Header: Code & Status */}
+                {/* Card Header: Checkbox, Code & Status */}
                 <div className="flex items-center justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono font-bold text-xs bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 px-2 py-0.5 rounded-md" title="Nº Patrimônio">
-                      {asset.code}
-                    </span>
+                    {/* Individual selection checkbox */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelectAsset(asset.id);
+                      }}
+                      className="p-1 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title={selectedAssetIds.includes(asset.id) ? 'Desmarcar material' : 'Selecionar material'}
+                    >
+                      {selectedAssetIds.includes(asset.id) ? (
+                        <CheckSquare className="w-4 h-4 text-indigo-400" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-500 hover:text-slate-300" />
+                      )}
+                    </button>
+
+                    {asset.code ? (
+                      <span className="font-mono font-bold text-xs bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 px-2 py-0.5 rounded-md" title="Nº Patrimônio">
+                        {asset.code}
+                      </span>
+                    ) : (
+                      <span className="font-mono text-[10.5px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/60 px-2 py-0.5 rounded-md italic" title="Patrimônio a preencher">
+                        A preencher
+                      </span>
+                    )}
                     {asset.codMaterial && (
                       <span className="font-mono text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.5 rounded" title="Cod Material">
                         {asset.codMaterial}
@@ -836,6 +1141,11 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                     {asset.codUnidade && (
                       <span className="font-mono text-[9.5px] bg-emerald-950/50 text-emerald-300 border border-emerald-800/50 px-1.5 py-0.5 rounded" title="Cód Unidade Gestora">
                         {asset.codUnidade}
+                      </span>
+                    )}
+                    {(!asset.code || !asset.name || !asset.detentorResponsavel) && (
+                      <span className="text-[9.5px] bg-amber-950/60 text-amber-300 border border-amber-800/60 px-1.5 py-0.5 rounded font-medium">
+                        Campos pendentes
                       </span>
                     )}
                   </div>
@@ -862,7 +1172,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
                 {/* Title and Category */}
                 <h3 className="font-bold text-sm text-white group-hover:text-indigo-200 transition-colors line-clamp-1">
-                  {asset.name}
+                  {asset.name ? asset.name : <span className="italic text-amber-400 font-normal">Material sem nome (A preencher)</span>}
                 </h3>
 
                 <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
@@ -897,15 +1207,15 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 <div className="mt-3 pt-2.5 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-400">
                   <div className="flex items-center space-x-1.5 truncate">
                     <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span className="truncate">{asset.location?.room || 'Almoxarifado Central'}</span>
+                    <span className="truncate">{asset.location?.room || <span className="italic text-slate-500">Local não definido (A preencher)</span>}</span>
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] pt-1 text-slate-400">
-                    <span className="truncate mr-2" title={`Detentor Responsável: ${asset.detentorResponsavel || asset.location?.responsiblePerson || 'Carlos Alberto Silva'}`}>
-                      Detentor: <strong className="text-slate-200 font-semibold">{asset.detentorResponsavel || asset.location?.responsiblePerson || 'Carlos Alberto Silva'}</strong>
+                    <span className="truncate mr-2" title={`Detentor Responsável: ${asset.detentorResponsavel || 'A preencher'}`}>
+                      Detentor: <strong className="text-slate-200 font-semibold">{asset.detentorResponsavel || <span className="italic text-amber-400 font-normal">A preencher</span>}</strong>
                     </span>
                     <span className="font-mono font-bold text-emerald-400 shrink-0">
-                      R$ {asset.acquisitionValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {asset.acquisitionValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
@@ -994,10 +1304,10 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   </span>
                   <div className="flex items-center space-x-2">
                     <span className="text-[11px] font-mono font-bold text-emerald-300 bg-emerald-950/70 border border-emerald-800/60 px-2 py-0.5 rounded">
-                      Cód Unidade: {activeAssetModal.codUnidade || 'ESSgt - 160136'}
+                      Cód Unidade: {activeAssetModal.codUnidade || 'Não inf.'}
                     </span>
                     <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-950/70 border border-indigo-800/60 px-2 py-0.5 rounded">
-                      Cód Mat: {activeAssetModal.codMaterial || 'N/A'}
+                      Cód Mat: {activeAssetModal.codMaterial || 'Não inf.'}
                     </span>
                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                       activeAssetModal.status === 'em_uso' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' :
@@ -1014,25 +1324,33 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   {/* 1. Cod Unidade */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Cod Unidade</span>
-                    <span className="font-mono font-bold text-slate-200">{activeAssetModal.codUnidade || 'ESSgt - 160136'}</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      {activeAssetModal.codUnidade || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 2. Cod Material */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Cod Material</span>
-                    <span className="font-mono font-bold text-slate-200">{activeAssetModal.codMaterial || 'N/A'}</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      {activeAssetModal.codMaterial || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 3. Patrimônio */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-indigo-900/40">
                     <span className="text-[10px] text-indigo-400 uppercase font-bold block">Patrimônio</span>
-                    <span className="font-mono font-black text-indigo-200 text-sm">{activeAssetModal.code}</span>
+                    <span className="font-mono font-black text-indigo-200 text-sm">
+                      {activeAssetModal.code || <span className="text-amber-400 text-xs italic font-semibold">A preencher</span>}
+                    </span>
                   </div>
 
                   {/* 4. N. Série */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">N. Série</span>
-                    <span className="font-mono text-slate-200">{activeAssetModal.serialNumber?.trim() || 'N/A'}</span>
+                    <span className="font-mono text-slate-200">
+                      {activeAssetModal.serialNumber?.trim() || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 4. Categoria */}
@@ -1044,14 +1362,16 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   {/* 5. Sala/Local de Alocação */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sala/Local de Alocação</span>
-                    <span className="font-semibold text-slate-200">{activeAssetModal.location?.room || 'Almoxarifado Central'}</span>
+                    <span className="font-semibold text-slate-200">
+                      {activeAssetModal.location?.room || <span className="text-slate-500 italic font-normal">Não informada</span>}
+                    </span>
                   </div>
 
                   {/* 6. Detentor Responsável */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-indigo-800/60 bg-indigo-950/20">
                     <span className="text-[10px] text-indigo-400 uppercase font-bold block">Detentor Responsável</span>
                     <span className="font-bold text-white truncate block" title={activeAssetModal.detentorResponsavel}>
-                      {activeAssetModal.detentorResponsavel || activeAssetModal.location?.responsiblePerson || 'Carlos Alberto Silva'}
+                      {activeAssetModal.detentorResponsavel || <span className="text-amber-400 italic font-normal">A preencher</span>}
                     </span>
                   </div>
 
@@ -1067,45 +1387,55 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Data Inclusão</span>
                     <span className="font-mono text-slate-200">
-                      {activeAssetModal.dataInclusao || activeAssetModal.acquisitionDate || 'N/A'}
+                      {activeAssetModal.dataInclusao || activeAssetModal.acquisitionDate || <span className="text-slate-500 italic font-normal">Em branco</span>}
                     </span>
                   </div>
 
                   {/* 9. NE */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">NE</span>
-                    <span className="font-mono text-slate-200">{activeAssetModal.ne || 'N/A'}</span>
+                    <span className="font-mono text-slate-200">
+                      {activeAssetModal.ne || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 10. NL */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">NL</span>
-                    <span className="font-mono text-slate-200">{activeAssetModal.nl || 'N/A'}</span>
+                    <span className="font-mono text-slate-200">
+                      {activeAssetModal.nl || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 11. FAM */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">FAM</span>
-                    <span className="font-mono text-slate-200">{activeAssetModal.fam || 'N/A'}</span>
+                    <span className="font-mono text-slate-200">
+                      {activeAssetModal.fam || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 12. Dom */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Dom</span>
-                    <span className="font-mono text-slate-200">{activeAssetModal.dom || 'N/A'}</span>
+                    <span className="font-mono text-slate-200">
+                      {activeAssetModal.dom || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 13. BAM */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">BAM</span>
-                    <span className="font-mono text-slate-200">{activeAssetModal.bam || 'N/A'}</span>
+                    <span className="font-mono text-slate-200">
+                      {activeAssetModal.bam || <span className="text-slate-500 italic font-normal">Em branco</span>}
+                    </span>
                   </div>
 
                   {/* 14. Conta Pat */}
                   <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Conta Pat</span>
                     <span className="font-mono text-slate-200 truncate block" title={activeAssetModal.contaPat}>
-                      {activeAssetModal.contaPat || 'N/A'}
+                      {activeAssetModal.contaPat || <span className="text-slate-500 italic font-normal">Em branco</span>}
                     </span>
                   </div>
 
@@ -1134,13 +1464,13 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 {/* 17. Nome do material & Especificações */}
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800 space-y-1">
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Nome do Material</span>
-                  <div className="text-slate-100 font-bold text-xs">{activeAssetModal.name}</div>
+                  <div className="text-slate-100 font-bold text-xs">{activeAssetModal.name || <span className="text-amber-400 italic font-normal">Em branco (A preencher)</span>}</div>
                 </div>
 
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800 space-y-1">
                   <span className="text-[10px] text-indigo-400 uppercase font-bold block">Especificações</span>
                   <p className="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap">
-                    {activeAssetModal.especificacoes || activeAssetModal.description || 'Sem especificações detalhadas cadastradas.'}
+                    {activeAssetModal.especificacoes || activeAssetModal.description || <span className="text-slate-500 italic font-normal">Em branco (A preencher)</span>}
                   </p>
                 </div>
               </div>
@@ -1536,13 +1866,12 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-300 mb-1">Patrimônio*</label>
+                    <label className="block font-semibold text-slate-300 mb-1">Patrimônio</label>
                     <input
                       type="text"
-                      required
                       value={formAsset.code || ''}
                       onChange={(e) => setFormAsset({ ...formAsset, code: e.target.value.toUpperCase() })}
-                      placeholder="Ex: PAT-2026-001"
+                      placeholder="Ex: PAT-2026-001 (ou deixe em branco para preencher posterior)"
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono font-bold"
                     />
                   </div>
@@ -1561,10 +1890,9 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2">
-                    <label className="block font-semibold text-slate-300 mb-1">Nome do Material*</label>
+                    <label className="block font-semibold text-slate-300 mb-1">Nome do Material</label>
                     <input
                       type="text"
-                      required
                       value={formAsset.name || ''}
                       onChange={(e) => setFormAsset({ ...formAsset, name: e.target.value })}
                       placeholder="Ex: Notebook Dell Latitude 5440 i7 32GB"
@@ -1760,11 +2088,10 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold text-slate-300 mb-1">Valor (R$)*</label>
+                    <label className="block font-semibold text-slate-300 mb-1">Valor (R$)</label>
                     <input
                       type="number"
                       step="0.01"
-                      required
                       value={formAsset.acquisitionValue ?? 0}
                       onChange={(e) => setFormAsset({ ...formAsset, acquisitionValue: parseFloat(e.target.value) || 0 })}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono font-bold"
@@ -1772,10 +2099,9 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-300 mb-1">Data Inclusão*</label>
+                    <label className="block font-semibold text-slate-300 mb-1">Data Inclusão</label>
                     <input
                       type="date"
-                      required
                       value={formAsset.dataInclusao || formAsset.acquisitionDate || ''}
                       onChange={(e) => setFormAsset({ ...formAsset, dataInclusao: e.target.value, acquisitionDate: e.target.value })}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono"
@@ -1834,7 +2160,106 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
         </div>
       )}
 
-      {/* --- CONFIRM DELETE MODAL / POPUP --- */}
+      {/* --- CONFIRM BULK DELETE POPUP: TEM CERTEZA QUE DESEJA APAGAR? --- */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-800/60 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center space-x-3 pb-3 border-b border-slate-800">
+              <span className="p-2.5 rounded-xl bg-rose-950 text-rose-400 border border-rose-800/60">
+                <AlertTriangle className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-bold text-base text-white">Tem certeza que deseja apagar?</h3>
+                <p className="text-[11px] text-slate-400">
+                  Exclusão em lote de materiais e ativos patrimoniados selecionados
+                </p>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="py-4 space-y-3.5 text-xs">
+              <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-200 flex items-start space-x-2.5">
+                <AlertCircle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-rose-100">
+                    Você selecionou {selectedAssetIds.length} {selectedAssetIds.length === 1 ? 'material' : 'materiais'} para apagar permanentemente.
+                  </p>
+                  <p className="text-[11px] text-rose-300/90 leading-relaxed">
+                    Esta ação não poderá ser desfeita. Todos os itens selecionados serão removidos do inventário, mapas de carga e relatórios.
+                  </p>
+                </div>
+              </div>
+
+              {/* Selected Assets Preview List */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span>Materiais selecionados ({selectedAssetIds.length})</span>
+                  <span>Valor Total: R$ {assets
+                    .filter(a => selectedAssetIds.includes(a.id))
+                    .reduce((sum, a) => sum + (a.acquisitionValue || 0), 0)
+                    .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                  {assets
+                    .filter(a => selectedAssetIds.includes(a.id))
+                    .map(item => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 text-[11px]"
+                      >
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <span className="font-mono font-bold text-indigo-300 bg-indigo-950/80 px-1.5 py-0.5 rounded border border-indigo-800/60 shrink-0">
+                            {item.code || 'S/Nº'}
+                          </span>
+                          <span className="text-white truncate font-medium">
+                            {item.name || 'Sem nome'}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2 shrink-0 ml-2">
+                          <span className="text-slate-400 text-[10px]">
+                            {item.location?.room || 'Sem sala'}
+                          </span>
+                          <span className="text-emerald-400 font-mono font-semibold">
+                            R$ {item.acquisitionValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* User audit note */}
+              <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
+                Operação executada por: <strong className="text-slate-200">{currentUser.name}</strong> ({currentUser.role}). O registro de exclusão em lote será gravado na <strong>Trilha de Auditoria</strong>.
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold text-slate-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                id="confirm-bulk-delete-btn"
+                onClick={handleConfirmBulkDelete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-lg shadow-rose-950/50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Sim, Apagar ({selectedAssetIds.length})</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- CONFIRM SINGLE DELETE MODAL / POPUP: TEM CERTEZA QUE DESEJA APAGAR? --- */}
       {assetToDelete && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-rose-800/60 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-200 animate-in fade-in zoom-in-95 duration-150">
@@ -1844,7 +2269,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 <AlertTriangle className="w-5 h-5" />
               </span>
               <div>
-                <h3 className="font-bold text-base text-white">Confirmar Exclusão de Material</h3>
+                <h3 className="font-bold text-base text-white">Tem certeza que deseja apagar?</h3>
                 <p className="text-[11px] text-slate-400">Esta ação é permanente e removerá o item do inventário.</p>
               </div>
             </div>
@@ -1936,7 +2361,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-lg shadow-rose-950/50 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Sim, Excluir Material</span>
+                <span>Sim, Apagar Material</span>
               </button>
             </div>
           </div>
